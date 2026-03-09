@@ -1,17 +1,19 @@
-import api from "./api"
+import { API_BASE_URL, api } from "./api";
+import type { HealthStatus } from "@/types/api";
 
-export const getHealth = async () => {
+export const getHealth = async (): Promise<HealthStatus> =>
+	api.get<HealthStatus>("/health");
 
-const res = await api.get("/health")
+export const getLiveHealth = async (): Promise<HealthStatus> =>
+	api.get<HealthStatus>("/api/health/live");
 
-return res.data
+export const getReadyHealth = async (): Promise<HealthStatus> =>
+	api.get<HealthStatus>("/api/health/ready");
 
-}
-
-export const getMetrics = async () => {
-
-const res = await api.get("/metrics")
-
-return res.data
-
-}
+export const getMetrics = async (): Promise<string> => {
+	const response = await fetch(`${API_BASE_URL}/metrics`, { cache: "no-store" });
+	if (!response.ok) {
+		throw new Error(`Metrics request failed: ${response.status}`);
+	}
+	return response.text();
+};
