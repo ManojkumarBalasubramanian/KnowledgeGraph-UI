@@ -1,23 +1,25 @@
-import api from "./api"
+import { api } from "./api";
+import type {
+	CosmosOnboardRequest,
+	CosmosOnboardResponse,
+	KafkaOnboardRequest,
+	KafkaOnboardResponse,
+	SQLOnboardRequest,
+	SQLOnboardResponse,
+} from "@/types/api";
 
-export const onboardSQL = async (connection_string:string) => {
+export const onboardSQL = async (
+	payload: SQLOnboardRequest,
+	sync = false,
+): Promise<SQLOnboardResponse> =>
+	api.post<SQLOnboardResponse>(`/api/onboard/sql?sync=${sync}`, payload);
 
-return await api.post("/api/onboard/sql",{
+export const onboardCosmos = async (
+	payload: CosmosOnboardRequest,
+): Promise<CosmosOnboardResponse> =>
+	api.post<CosmosOnboardResponse>("/api/onboard/cosmos", payload);
 
-connection_string
-
-})
-
-}
-
-export const onboardCosmos = async (payload:any) => {
-
-return await api.post("/api/onboard/cosmos",payload)
-
-}
-
-export const onboardKafka = async (payload:any) => {
-
-return await api.post("/api/onboard/kafka",payload)
-
-}
+export const onboardKafka = async (
+	payload: KafkaOnboardRequest,
+): Promise<KafkaOnboardResponse> =>
+	api.post<KafkaOnboardResponse>("/api/onboard/kafka", payload);

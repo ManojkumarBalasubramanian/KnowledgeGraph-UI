@@ -1,53 +1,47 @@
-import Link from "next/link"
+"use client";
 
-export default function Sidebar(){
+import Link from "next/link";
+import { usePathname } from "next/navigation";
 
-return(
+const links = [
+	{ href: "/", label: "Overview" },
+	{ href: "/dashboard", label: "Operations" },
+	{ href: "/graph", label: "Graph Explorer" },
+	{ href: "/enterprise", label: "Relationships" },
+	{ href: "/domains", label: "LLM Studio" },
+	{ href: "/subdomains", label: "Node Search" },
+	{ href: "/onboard/sql", label: "Onboard SQL" },
+	{ href: "/onboard/cosmos", label: "Onboard Cosmos" },
+	{ href: "/onboard/kafka", label: "Onboard Kafka" },
+];
 
-<div className="w-64 h-screen bg-gray-900 text-white p-6">
+export default function Sidebar() {
+	const pathname = usePathname();
 
-<h2 className="text-xl font-bold">
-KG Platform
-</h2>
-
-<ul className="mt-6 space-y-4">
-
-<li>
-<Link href="/dashboard">Dashboard</Link>
-</li>
-
-<li>
-<Link href="/enterprise">Enterprise</Link>
-</li>
-
-<li>
-<Link href="/domains">Domains</Link>
-</li>
-
-<li>
-<Link href="/subdomains">SubDomains</Link>
-</li>
-
-<li>
-<Link href="/onboard/sql">Onboard SQL</Link>
-</li>
-
-<li>
-<Link href="/onboard/cosmos">Onboard Cosmos</Link>
-</li>
-
-<li>
-<Link href="/onboard/kafka">Onboard Kafka</Link>
-</li>
-
-<li>
-<Link href="/graph">Graph Explorer</Link>
-</li>
-
-</ul>
-
-</div>
-
-)
-
+	return (
+		<aside className="w-full border-b border-blue-200 bg-[#003a8c] text-blue-50 md:min-h-[calc(100vh-4rem)] md:w-72 md:border-b-0 md:border-r md:border-r-blue-900/50">
+			<div className="p-4 md:p-6">
+				<p className="text-xs uppercase tracking-[0.24em] text-blue-100/70">Navigate</p>
+				<ul className="mt-4 grid grid-cols-2 gap-2 md:grid-cols-1">
+					{links.map((link) => {
+						const active = pathname === link.href;
+						return (
+							<li key={link.href}>
+								<Link
+									href={link.href}
+									className={`block rounded-lg px-3 py-2 text-sm transition ${
+										active
+											? "bg-gradient-to-r from-[#005cb9] via-[#1b73cf] to-[#e32934] text-white"
+											: "text-blue-100/85 hover:bg-blue-800/60 hover:text-white"
+									}`}
+								>
+									{link.label}
+								</Link>
+							</li>
+						);
+					})}
+				</ul>
+			</div>
+		</aside>
+	);
 }

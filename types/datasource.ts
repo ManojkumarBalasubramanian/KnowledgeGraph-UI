@@ -1,13 +1,5 @@
-export type SQLSource = {
-
-connection_string:string
-
-}
-
-export type CosmosSource = {
-
-uri:string
-key:string
-database:string
-
-}
+export type {
+	CosmosOnboardRequest as CosmosSource,
+	KafkaOnboardRequest as KafkaSource,
+	SQLOnboardRequest as SQLSource,
+} from "./api";
