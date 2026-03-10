@@ -23,17 +23,17 @@ const featureCards = [
   },
   {
     title: "LLM Studio",
-    href: "/domains",
+    href: "/llm",
     description: "Generate detailed AI answers and lightweight responses.",
   },
   {
     title: "Node Search",
-    href: "/subdomains",
+    href: "/node-search",
     description: "Search graph nodes by label and property filters.",
   },
   {
     title: "Manual Relationships",
-    href: "/enterprise",
+    href: "/relationships",
     description: "Create governance and lineage relationships between assets.",
   },
 ];

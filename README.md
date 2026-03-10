@@ -1,6 +1,6 @@
-# Knowledge Graph UI
+# Metadata Discovery Hub
 
-Frontend control plane for the Knowledge Graph Metadata Platform, implemented from the backend handoff contract in [FRONTEND_HANDOFF.md](../FRONTEND_HANDOFF.md).
+Frontend control plane for the Cognitive Metadata Platform, implemented from the backend handoff contract in [FRONTEND_HANDOFF.md](../FRONTEND_HANDOFF.md).
 
 ## Stack
 
@@ -36,9 +36,9 @@ npm run dev
 - `/` Overview and platform entry point
 - `/dashboard` Health probes, graph stats, schema, and metrics preview
 - `/graph` Graph visualization payload + Cypher query runner
-- `/subdomains` Node search (`/api/graph/nodes/search`)
-- `/domains` LLM Studio (`/api/llm/generate`, `/api/llm/answer`)
-- `/enterprise` Manual relationship manager (`/api/relationship/manual`)
+- `/node-search` Node search (`/api/graph/nodes/search`)
+- `/llm` LLM Studio (`/api/llm/generate`, `/api/llm/answer`)
+- `/relationships` Manual relationship manager (`/api/relationship/manual`)
 - `/onboard/sql` SQL metadata onboarding
 - `/onboard/cosmos` Cosmos DB onboarding
 - `/onboard/kafka` Kafka onboarding
