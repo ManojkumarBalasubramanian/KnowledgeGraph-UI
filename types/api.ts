@@ -132,6 +132,63 @@ export interface SQLOnboardResponse {
   };
 }
 
+export interface SQLDescriptionListRequest {
+  connection_string?: string | null;
+  approved?: "Yes" | "No" | null;
+  limit?: number;
+}
+
+export interface SQLDescriptionItem {
+  server_name: string;
+  database_name: string;
+  schema_name: string;
+  table_name: string;
+  column_name: string;
+  data_type?: string | null;
+  is_nullable?: "YES" | "NO";
+  draft_description: string | null;
+  approved_description?: string | null;
+  approved?: "Yes" | "No";
+  approved_by?: string | null;
+  approved_at?: string | null;
+  llm_confidence: number | null;
+  prompt_version: string | null;
+  needs_graph_publish?: boolean;
+  graph_publish_status?: "NotPublished" | "Published" | "Failed";
+  updated_at: string;
+}
+
+export interface SQLDescriptionListResponse {
+  count: number;
+  items: SQLDescriptionItem[];
+}
+
+export interface SQLDescriptionsDiagnosticsRequest {
+  connection_string?: string | null;
+}
+
+export interface SQLDescriptionsDiagnosticsResponse {
+  resolved_source: string;
+  kg_sql_server: string | null;
+  kg_sql_database: string | null;
+  kg_sql_driver: string | null;
+  kg_sql_port: number | null;
+  kg_sql_encrypt: boolean | null;
+  kg_sql_connection_string_present: boolean;
+  uses_override_connection_string: boolean;
+  connectivity: {
+    status: string;
+    error: string | null;
+    server_name: string | null;
+    database_name: string | null;
+  };
+  resolved_preview: string;
+}
+
+export interface MessageResponse {
+  message: string;
+}
+
 export interface CosmosOnboardRequest {
   uri: string;
   key: string;

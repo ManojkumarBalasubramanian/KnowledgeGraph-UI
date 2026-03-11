@@ -1,6 +1,6 @@
 # Metadata Discovery Hub
 
-Frontend control plane for the Cognitive Metadata Platform, implemented from the backend handoff contract in [FRONTEND_HANDOFF.md](../FRONTEND_HANDOFF.md).
+Frontend control plane for the Cognitive Metadata Platform.
 
 ## Stack
 
