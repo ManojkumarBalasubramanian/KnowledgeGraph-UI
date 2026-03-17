@@ -120,16 +120,35 @@ export interface GraphSchema {
 }
 
 export interface SQLOnboardRequest {
-  connection_string: string;
+  connection_string?: string;
+  schema_name?: string;
+  table_name?: string;
+  delta_only?: boolean;
 }
 
 export interface SQLOnboardResponse {
   message: string;
+  schema_name?: string | null;
+  table_name?: string | null;
+  delta_only?: boolean;
   result?: {
     database: string;
     csv_export: string;
     ontology_count: number;
   };
+}
+
+export interface SQLCatalogRequest {
+  connection_string?: string;
+}
+
+export interface SQLCatalogSchema {
+  schema: string;
+  tables: string[];
+}
+
+export interface SQLCatalogResponse {
+  schemas: SQLCatalogSchema[];
 }
 
 export interface SQLDescriptionListRequest {

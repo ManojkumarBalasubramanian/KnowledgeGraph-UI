@@ -1,4 +1,5 @@
 import type {
+	SQLCatalogSchema,
 	SQLDescriptionItem,
 	SQLDescriptionsDiagnosticsResponse,
 	SQLOnboardResponse,
@@ -14,7 +15,16 @@ export interface SQLOnboardingPanelProps {
 	onConnectionStringChange: ValueChangeHandler<string>;
 	isOnboarding: boolean;
 	isLoadingQueue: boolean;
+	isLoadingCatalog: boolean;
+	catalog: SQLCatalogSchema[];
+	selectedSchema: string;
+	onSelectedSchemaChange: ValueChangeHandler<string>;
+	selectedTable: string;
+	onSelectedTableChange: ValueChangeHandler<string>;
+	deltaOnly: boolean;
+	onDeltaOnlyChange: ValueChangeHandler<boolean>;
 	onSubmit: AsyncAction;
+	onLoadCatalog: AsyncAction;
 	onLoadQueue: AsyncAction;
 	onboardResponse: SQLOnboardResponse | null;
 }

@@ -3,11 +3,13 @@
 import { useMemo, useState } from "react";
 import { APIRequestError } from "@/services/api";
 import {
+	fetchSQLCatalog,
 	getSQLDescriptionsDiagnostics,
 	listSQLDescriptions,
 	onboardSQL,
 } from "@/services/onboardService";
 import type {
+	SQLCatalogSchema,
 	SQLDescriptionItem,
 	SQLDescriptionsDiagnosticsResponse,
 	SQLOnboardResponse,
@@ -19,6 +21,10 @@ import SQLReviewQueuePanel from "./sql/SQLReviewQueuePanel";
 
 export default function SQLForm() {
 	const [connectionString, setConnectionString] = useState("");
+	const [catalog, setCatalog] = useState<SQLCatalogSchema[]>([]);
+	const [selectedSchema, setSelectedSchema] = useState("");
+	const [selectedTable, setSelectedTable] = useState("");
+	const [deltaOnly, setDeltaOnly] = useState(true);
 	const [approvedFilter, setApprovedFilter] = useState<SQLApprovedFilter>("No");
 	const [databaseFilter, setDatabaseFilter] = useState("");
 	const [schemaFilter, setSchemaFilter] = useState("");
@@ -28,6 +34,7 @@ export default function SQLForm() {
 	const [isOnboarding, setIsOnboarding] = useState(false);
 	const [isLoadingQueue, setIsLoadingQueue] = useState(false);
 	const [isLoadingDiagnostics, setIsLoadingDiagnostics] = useState(false);
+	const [isLoadingCatalog, setIsLoadingCatalog] = useState(false);
 
 	const [onboardResponse, setOnboardResponse] = useState<SQLOnboardResponse | null>(null);
 	const [diagnostics, setDiagnostics] = useState<SQLDescriptionsDiagnosticsResponse | null>(null);
@@ -88,6 +95,28 @@ export default function SQLForm() {
 		}
 	};
 
+	const loadCatalog = async () => {
+		setIsLoadingCatalog(true);
+		setError("");
+
+		try {
+			const result = await fetchSQLCatalog({ connection_string: connectionString.trim() });
+			setCatalog(result.schemas);
+			setSelectedSchema("");
+			setSelectedTable("");
+			setStatusMessage(`Loaded ${result.schemas.length} schema(s).`);
+		} catch (err) {
+			setError(formatError(err, "Failed to load schema/table catalog."));
+		} finally {
+			setIsLoadingCatalog(false);
+		}
+	};
+
+	const updateSelectedSchema = (schema: string) => {
+		setSelectedSchema(schema);
+		setSelectedTable("");
+	};
+
 	const submit = async () => {
 		setIsOnboarding(true);
 		setError("");
@@ -95,7 +124,14 @@ export default function SQLForm() {
 		setStatusMessage("");
 
 		try {
-			const result = await onboardSQL({ connection_string: connectionString.trim() });
+			const payload = {
+				connection_string: connectionString.trim(),
+				delta_only: deltaOnly,
+				...(selectedSchema ? { schema_name: selectedSchema } : {}),
+				...(selectedTable ? { table_name: selectedTable } : {}),
+			};
+
+			const result = await onboardSQL(payload);
 			setOnboardResponse(result);
 			setStatusMessage(result.message);
 		} catch (err) {
@@ -129,7 +165,16 @@ export default function SQLForm() {
 				onConnectionStringChange={setConnectionString}
 				isOnboarding={isOnboarding}
 				isLoadingQueue={isLoadingQueue}
+				isLoadingCatalog={isLoadingCatalog}
+				catalog={catalog}
+				selectedSchema={selectedSchema}
+				onSelectedSchemaChange={updateSelectedSchema}
+				selectedTable={selectedTable}
+				onSelectedTableChange={setSelectedTable}
+				deltaOnly={deltaOnly}
+				onDeltaOnlyChange={setDeltaOnly}
 				onSubmit={submit}
+				onLoadCatalog={loadCatalog}
 				onLoadQueue={loadQueue}
 				onboardResponse={onboardResponse}
 			/>

@@ -1,5 +1,7 @@
 import { api } from "./api";
 import type {
+	SQLCatalogRequest,
+	SQLCatalogResponse,
 	CosmosOnboardRequest,
 	CosmosOnboardResponse,
 	KafkaOnboardRequest,
@@ -11,6 +13,11 @@ import type {
 	SQLOnboardRequest,
 	SQLOnboardResponse,
 } from "@/types/api";
+
+export const fetchSQLCatalog = async (
+	payload: SQLCatalogRequest,
+): Promise<SQLCatalogResponse> =>
+	api.post<SQLCatalogResponse>("/api/onboard/sql/catalog", payload);
 
 export const onboardSQL = async (
 	payload: SQLOnboardRequest,
