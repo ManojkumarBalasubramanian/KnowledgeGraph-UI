@@ -45,7 +45,7 @@ export default function EnterprisePage() {
 
 	return (
 		<section className="surface max-w-3xl p-6">
-			<h2 className="font-display text-3xl text-blue-950">Manual Relationship Manager</h2>
+			<h2 className="font-display text-3xl text-blue-950">Graph Relationship Manager</h2>
 			<p className="mt-1 text-sm text-blue-900/75">
 				Create custom relationships such as REFERENCES, DERIVED_FROM, and DEPENDS_ON.
 			</p>

@@ -19,7 +19,7 @@ const mainCategories = [
 	{
 		heading: "Knowledge Graph",
 		links: [
-			{ href: "/graph", label: "Graph Explorer" },
+			{ href: "/graph", label: "Metadata Explorer" },
 			{ href: "/relationships", label: "Relationships" },
 			{ href: "/node-search", label: "Node Search" },
 		],

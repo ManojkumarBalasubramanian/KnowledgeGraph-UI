@@ -35,10 +35,10 @@ npm run dev
 
 - `/` Overview and platform entry point
 - `/dashboard` Health probes, graph stats, schema, and metrics preview
-- `/graph` Graph visualization payload + Cypher query runner
+- `/graph` Metadata Explorer with schema-based hierarchy, column-level editing, and bulk updates
 - `/node-search` Node search (`/api/graph/nodes/search`)
 - `/llm` LLM Studio (`/api/llm/generate`, `/api/llm/answer`)
-- `/relationships` Manual relationship manager (`/api/relationship/manual`)
+- `/relationships` Graph relationship manager (`/api/relationship/manual`)
 - `/onboard/sql` SQL metadata onboarding
 - `/onboard/cosmos` Cosmos DB onboarding
 - `/onboard/kafka` Kafka onboarding

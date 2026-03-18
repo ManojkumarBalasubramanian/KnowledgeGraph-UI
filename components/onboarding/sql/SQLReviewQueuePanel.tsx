@@ -32,9 +32,9 @@ export default function SQLReviewQueuePanel({
 							onApprovedFilterChange(event.target.value as SQLApprovedFilter)
 						}
 					>
+						<option value="">All</option>
 						<option value="No">No</option>
 						<option value="Yes">Yes</option>
-						<option value="">All</option>
 					</select>
 				</div>
 				<div className="min-w-40 flex-1">

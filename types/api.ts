@@ -119,6 +119,86 @@ export interface GraphSchema {
   relationship_types: string[];
 }
 
+export type MetadataStoreType = "Database" | "CosmosDatabase";
+
+export type MetadataAssetType = "Table" | "Collection";
+
+export interface MetadataExplorerAsset {
+  id: string;
+  name: string;
+  asset_type: MetadataAssetType;
+}
+
+export interface MetadataExplorerSchema {
+  id: string;
+  name: string;
+  assets: MetadataExplorerAsset[];
+}
+
+export interface MetadataExplorerStore {
+  id: string;
+  name: string;
+  store_type: MetadataStoreType;
+  schemas: MetadataExplorerSchema[];
+}
+
+export interface MetadataExplorerSubDomain {
+  id: string;
+  name: string;
+  stores: MetadataExplorerStore[];
+}
+
+export interface MetadataExplorerDomain {
+  id: string;
+  name: string;
+  sub_domains: MetadataExplorerSubDomain[];
+}
+
+export interface MetadataExplorerHierarchyResponse {
+  domains: MetadataExplorerDomain[];
+}
+
+export interface MetadataApprovedDescription {
+  description: string;
+  approved_by: string | null;
+  approved_at: string | null;
+  confidence: number | null;
+}
+
+export interface MetadataColumnDetail {
+  column_id: string;
+  name: string;
+  data_type: string | null;
+  business_description: string | null;
+  llm_confidence: number | null;
+  approved_descriptions: MetadataApprovedDescription[];
+}
+
+export interface MetadataAssetDetailResponse {
+  asset_id: string;
+  name: string;
+  data_type: string | null;
+  business_description: string | null;
+  llm_confidence: number | null;
+  approved_descriptions: MetadataApprovedDescription[];
+  columns: MetadataColumnDetail[];
+}
+
+export interface MetadataColumnDescriptionBulkItem {
+  column_id: string;
+  business_description: string;
+  llm_confidence: number;
+}
+
+export interface MetadataBulkUpdateColumnDescriptionsRequest {
+  steward?: string;
+  columns: MetadataColumnDescriptionBulkItem[];
+}
+
+export interface MetadataProcessApprovedDescriptionsRequest {
+  requested_by?: string;
+}
+
 export interface SQLOnboardRequest {
   connection_string?: string;
   schema_name?: string;

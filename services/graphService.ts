@@ -7,6 +7,11 @@ import type {
 	GraphSchema,
 	GraphStats,
 	GraphVisualization,
+	MetadataBulkUpdateColumnDescriptionsRequest,
+	MessageResponse,
+	MetadataAssetDetailResponse,
+	MetadataExplorerHierarchyResponse,
+	MetadataProcessApprovedDescriptionsRequest,
 	NodeSearchRequest,
 	NodeSearchResponse,
 } from "@/types/api";
@@ -105,3 +110,31 @@ export const getGraphStats = async (): Promise<GraphStats> =>
 
 export const getGraphSchema = async (): Promise<GraphSchema> =>
 	api.get<GraphSchema>("/api/graph/schema");
+
+export const getMetadataExplorerHierarchy = async (): Promise<MetadataExplorerHierarchyResponse> =>
+	api.get<MetadataExplorerHierarchyResponse>("/api/graph/metadata-explorer/hierarchy");
+
+export const getMetadataAssetDetail = async (
+	assetId: string,
+): Promise<MetadataAssetDetailResponse> =>
+	api.get<MetadataAssetDetailResponse>(
+		`/api/graph/metadata-explorer/assets/${encodeURIComponent(assetId)}`,
+	);
+
+export const bulkUpdateMetadataColumnDescriptions = async (
+	assetId: string,
+	payload: MetadataBulkUpdateColumnDescriptionsRequest,
+): Promise<MessageResponse> =>
+	api.post<MessageResponse>(
+		`/api/graph/metadata-explorer/assets/${encodeURIComponent(assetId)}/columns/business-description/bulk`,
+		payload,
+	);
+
+export const processMetadataApprovedDescriptions = async (
+	assetId: string,
+	payload: MetadataProcessApprovedDescriptionsRequest,
+): Promise<MessageResponse> =>
+	api.post<MessageResponse>(
+		`/api/graph/metadata-explorer/assets/${encodeURIComponent(assetId)}/process-approved`,
+		payload,
+	);

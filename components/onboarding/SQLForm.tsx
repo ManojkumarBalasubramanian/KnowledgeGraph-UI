@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { APIRequestError } from "@/services/api";
 import {
 	fetchSQLCatalog,
@@ -25,7 +25,7 @@ export default function SQLForm() {
 	const [selectedSchema, setSelectedSchema] = useState("");
 	const [selectedTable, setSelectedTable] = useState("");
 	const [deltaOnly, setDeltaOnly] = useState(true);
-	const [approvedFilter, setApprovedFilter] = useState<SQLApprovedFilter>("No");
+	const [approvedFilter, setApprovedFilter] = useState<SQLApprovedFilter>("");
 	const [databaseFilter, setDatabaseFilter] = useState("");
 	const [schemaFilter, setSchemaFilter] = useState("");
 	const [tableFilter, setTableFilter] = useState("");
@@ -88,12 +88,19 @@ export default function SQLForm() {
 			});
 
 			setQueue(result.items);
+			setStatusMessage(`Loaded ${result.count} description record(s).`);
 		} catch (err) {
 			setError(formatError(err, "Failed to load SQL description queue."));
 		} finally {
 			setIsLoadingQueue(false);
 		}
 	};
+
+	useEffect(() => {
+		void loadQueue();
+		// Initial load to prevent an empty queue panel on first open.
+		// eslint-disable-next-line react-hooks/exhaustive-deps
+	}, []);
 
 	const loadCatalog = async () => {
 		setIsLoadingCatalog(true);
