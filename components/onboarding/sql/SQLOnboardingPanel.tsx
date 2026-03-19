@@ -1,10 +1,15 @@
 import type { SQLOnboardingPanelProps } from "./types";
 
 export default function SQLOnboardingPanel({
+	domains,
+	selectedDomainId,
+	onSelectedDomainIdChange,
+	selectedSubDomainId,
+	onSelectedSubDomainIdChange,
+	isLoadingHierarchy,
 	connectionString,
 	onConnectionStringChange,
 	isOnboarding,
-	isLoadingQueue,
 	isLoadingCatalog,
 	catalog,
 	selectedSchema,
@@ -15,15 +20,51 @@ export default function SQLOnboardingPanel({
 	onDeltaOnlyChange,
 	onSubmit,
 	onLoadCatalog,
-	onLoadQueue,
-	onboardResponse,
 }: SQLOnboardingPanelProps) {
+	const selectedDomain = domains.find((domain) => domain.id === selectedDomainId);
+	const subDomains = selectedDomain?.sub_domains ?? [];
 	const selectedSchemaTables =
 		catalog.find((item) => item.schema === selectedSchema)?.tables ?? [];
 
 	return (
 		<section className="surface space-y-4 p-6">
 			<h2 className="font-display text-2xl text-blue-950">SQL Server Onboarding</h2>
+
+			<div className="grid gap-3 md:grid-cols-2">
+				<label className="space-y-1 text-sm text-blue-900">
+					<span className="font-medium">Domain</span>
+					<select
+						className="select-field"
+						disabled={isLoadingHierarchy || domains.length === 0}
+						value={selectedDomainId}
+						onChange={(event) => onSelectedDomainIdChange(event.target.value)}
+					>
+						<option value="">Select domain...</option>
+						{domains.map((domain) => (
+							<option key={domain.id} value={domain.id}>
+								{domain.name}
+							</option>
+						))}
+					</select>
+				</label>
+
+				<label className="space-y-1 text-sm text-blue-900">
+					<span className="font-medium">Sub Domain</span>
+					<select
+						className="select-field"
+						disabled={!selectedDomainId || isLoadingHierarchy}
+						value={selectedSubDomainId}
+						onChange={(event) => onSelectedSubDomainIdChange(event.target.value)}
+					>
+						<option value="">Select sub domain...</option>
+						{subDomains.map((subDomain) => (
+							<option key={subDomain.id} value={subDomain.id}>
+								{subDomain.name}
+							</option>
+						))}
+					</select>
+				</label>
+			</div>
 
 			<textarea
 				className="textarea-field min-h-32"
@@ -96,27 +137,13 @@ export default function SQLOnboardingPanel({
 			<div className="flex flex-wrap items-center gap-3">
 				<button
 					className="btn-primary"
-					disabled={isOnboarding || !connectionString.trim()}
+					disabled={isOnboarding || !connectionString.trim() || !selectedSubDomainId}
 					onClick={() => void onSubmit()}
 					type="button"
 				>
 					{isOnboarding ? "Running..." : "Start SQL Onboarding"}
 				</button>
-				<button
-					className="btn-secondary"
-					disabled={isLoadingQueue}
-					onClick={() => void onLoadQueue()}
-					type="button"
-				>
-					{isLoadingQueue ? "Loading queue..." : "Load Description Queue"}
-				</button>
 			</div>
-
-			{onboardResponse ? (
-				<pre className="alert-success overflow-auto text-xs">
-					{JSON.stringify(onboardResponse, null, 2)}
-				</pre>
-			) : null}
 		</section>
 	);
 }

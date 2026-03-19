@@ -204,6 +204,8 @@ export interface SQLOnboardRequest {
   schema_name?: string;
   table_name?: string;
   delta_only?: boolean;
+  domain_id?: string;
+  sub_domain_id?: string;
 }
 
 export interface SQLOnboardResponse {
@@ -231,59 +233,6 @@ export interface SQLCatalogResponse {
   schemas: SQLCatalogSchema[];
 }
 
-export interface SQLDescriptionListRequest {
-  connection_string?: string | null;
-  approved?: "Yes" | "No" | null;
-  limit?: number;
-}
-
-export interface SQLDescriptionItem {
-  server_name: string;
-  database_name: string;
-  schema_name: string;
-  table_name: string;
-  column_name: string;
-  data_type?: string | null;
-  is_nullable?: "YES" | "NO";
-  draft_description: string | null;
-  approved_description?: string | null;
-  approved?: "Yes" | "No";
-  approved_by?: string | null;
-  approved_at?: string | null;
-  llm_confidence: number | null;
-  prompt_version: string | null;
-  needs_graph_publish?: boolean;
-  graph_publish_status?: "NotPublished" | "Published" | "Failed";
-  updated_at: string;
-}
-
-export interface SQLDescriptionListResponse {
-  count: number;
-  items: SQLDescriptionItem[];
-}
-
-export interface SQLDescriptionsDiagnosticsRequest {
-  connection_string?: string | null;
-}
-
-export interface SQLDescriptionsDiagnosticsResponse {
-  resolved_source: string;
-  kg_sql_server: string | null;
-  kg_sql_database: string | null;
-  kg_sql_driver: string | null;
-  kg_sql_port: number | null;
-  kg_sql_encrypt: boolean | null;
-  kg_sql_connection_string_present: boolean;
-  uses_override_connection_string: boolean;
-  connectivity: {
-    status: string;
-    error: string | null;
-    server_name: string | null;
-    database_name: string | null;
-  };
-  resolved_preview: string;
-}
-
 export interface MessageResponse {
   message: string;
 }
@@ -292,6 +241,8 @@ export interface CosmosOnboardRequest {
   uri: string;
   key: string;
   database_name: string;
+  domain_id?: string;
+  sub_domain_id?: string;
 }
 
 export interface CosmosOnboardResponse {
@@ -301,6 +252,8 @@ export interface CosmosOnboardResponse {
 
 export interface KafkaOnboardRequest {
   bootstrap_servers: string;
+  domain_id?: string;
+  sub_domain_id?: string;
 }
 
 export interface KafkaOnboardResponse {
@@ -318,6 +271,63 @@ export interface ManualRelationshipRequest {
 
 export interface RelationshipResponse {
   message: string;
+}
+
+export interface ForeignKeyRelationshipRequest {
+  pk_table_name: string;
+  pk_column_name: string;
+  fk_table_name: string;
+  fk_column_name: string;
+  relationship_type: string;
+}
+
+export interface TableColumnInfo {
+  table_name: string;
+  column_name: string;
+  data_type?: string;
+}
+
+export interface RelationshipHierarchyColumn {
+  id: string;
+  name: string;
+  data_type?: string | null;
+}
+
+export interface RelationshipHierarchyTable {
+  id: string;
+  name: string;
+  columns: RelationshipHierarchyColumn[];
+}
+
+export interface RelationshipHierarchySchema {
+  id: string;
+  name: string;
+  tables: RelationshipHierarchyTable[];
+}
+
+export interface RelationshipHierarchyDatabase {
+  id: string;
+  name: string;
+  schemas: RelationshipHierarchySchema[];
+}
+
+export interface RelationshipHierarchyResponse {
+  databases: RelationshipHierarchyDatabase[];
+}
+
+export interface TableRelationshipItem {
+  relationship_type: string;
+  direction: "incoming" | "outgoing";
+  related_table: string;
+  pk_column: string | null;
+  fk_column: string | null;
+  cardinality: string | null;
+  created_at: string | null;
+}
+
+export interface TableRelationshipsResponse {
+  table_name: string;
+  relationships: TableRelationshipItem[];
 }
 
 export interface APIError {
@@ -348,3 +358,11 @@ export const RELATIONSHIP_TYPES = [
 ] as const;
 
 export type RelationshipType = (typeof RELATIONSHIP_TYPES)[number];
+
+export const FK_RELATIONSHIP_TYPES = [
+  "One-to-One",
+  "One-to-Many",
+  "Many-to-Many",
+] as const;
+
+export type FKRelationshipType = (typeof FK_RELATIONSHIP_TYPES)[number];

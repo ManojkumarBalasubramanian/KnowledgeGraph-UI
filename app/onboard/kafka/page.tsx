@@ -4,7 +4,7 @@ export default function Page() {
 	return (
 		<div className="space-y-4">
 			<p className="text-sm text-blue-900/75">
-				Endpoint: <span className="mono">POST /api/onboard/kafka</span>
+				Endpoints: <span className="mono">GET /api/graph/metadata-explorer/hierarchy + POST /api/onboard/kafka</span>
 			</p>
 			<KafkaForm />
 		</div>

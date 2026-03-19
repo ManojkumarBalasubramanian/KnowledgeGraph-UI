@@ -1,45 +1,31 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useState } from "react";
 import { APIRequestError } from "@/services/api";
+import { getMetadataExplorerHierarchy } from "@/services/graphService";
 import {
 	fetchSQLCatalog,
-	getSQLDescriptionsDiagnostics,
-	listSQLDescriptions,
 	onboardSQL,
 } from "@/services/onboardService";
 import type {
 	SQLCatalogSchema,
-	SQLDescriptionItem,
-	SQLDescriptionsDiagnosticsResponse,
-	SQLOnboardResponse,
+	MetadataExplorerDomain,
 } from "@/types/api";
-import type { SQLApprovedFilter } from "./sql/types";
-import SQLDiagnosticsPanel from "./sql/SQLDiagnosticsPanel";
 import SQLOnboardingPanel from "./sql/SQLOnboardingPanel";
-import SQLReviewQueuePanel from "./sql/SQLReviewQueuePanel";
 
 export default function SQLForm() {
 	const [connectionString, setConnectionString] = useState("");
+	const [domains, setDomains] = useState<MetadataExplorerDomain[]>([]);
+	const [selectedDomainId, setSelectedDomainId] = useState("");
+	const [selectedSubDomainId, setSelectedSubDomainId] = useState("");
 	const [catalog, setCatalog] = useState<SQLCatalogSchema[]>([]);
 	const [selectedSchema, setSelectedSchema] = useState("");
 	const [selectedTable, setSelectedTable] = useState("");
 	const [deltaOnly, setDeltaOnly] = useState(true);
-	const [approvedFilter, setApprovedFilter] = useState<SQLApprovedFilter>("");
-	const [databaseFilter, setDatabaseFilter] = useState("");
-	const [schemaFilter, setSchemaFilter] = useState("");
-	const [tableFilter, setTableFilter] = useState("");
-	const [queueLimit, setQueueLimit] = useState("200");
 
 	const [isOnboarding, setIsOnboarding] = useState(false);
-	const [isLoadingQueue, setIsLoadingQueue] = useState(false);
-	const [isLoadingDiagnostics, setIsLoadingDiagnostics] = useState(false);
 	const [isLoadingCatalog, setIsLoadingCatalog] = useState(false);
-
-	const [onboardResponse, setOnboardResponse] = useState<SQLOnboardResponse | null>(null);
-	const [diagnostics, setDiagnostics] = useState<SQLDescriptionsDiagnosticsResponse | null>(null);
-
-	const [queue, setQueue] = useState<SQLDescriptionItem[]>([]);
+	const [isLoadingHierarchy, setIsLoadingHierarchy] = useState(false);
 
 	const [statusMessage, setStatusMessage] = useState("");
 	const [error, setError] = useState("");
@@ -54,53 +40,27 @@ export default function SQLForm() {
 		return fallbackMessage;
 	};
 
-	const filteredQueue = useMemo(() => {
-		const db = databaseFilter.trim().toLowerCase();
-		const schema = schemaFilter.trim().toLowerCase();
-		const table = tableFilter.trim().toLowerCase();
+	useEffect(() => {
+		const loadHierarchy = async () => {
+			setIsLoadingHierarchy(true);
+			setError("");
 
-		return queue.filter((item) => {
-			const dbMatch = !db || item.database_name.toLowerCase().includes(db);
-			const schemaMatch = !schema || item.schema_name.toLowerCase().includes(schema);
-			const tableMatch = !table || item.table_name.toLowerCase().includes(table);
+			try {
+				const result = await getMetadataExplorerHierarchy();
+				setDomains(result.domains);
+			} catch (err) {
+				setError(formatError(err, "Failed to load Domain/Sub Domain hierarchy."));
+			} finally {
+				setIsLoadingHierarchy(false);
+			}
+		};
 
-			return dbMatch && schemaMatch && tableMatch;
-		});
-	}, [databaseFilter, queue, schemaFilter, tableFilter]);
-
-	const safeNumber = (value: string, fallback: number) => {
-		const parsed = Number(value);
-		if (!Number.isFinite(parsed) || parsed <= 0) {
-			return fallback;
-		}
-		return Math.floor(parsed);
-	};
-
-	const loadQueue = async () => {
-		setIsLoadingQueue(true);
-		setError("");
-
-		try {
-			const result = await listSQLDescriptions({
-				connection_string: connectionString.trim() || null,
-				approved: approvedFilter || null,
-				limit: safeNumber(queueLimit, 200),
-			});
-
-			setQueue(result.items);
-			setStatusMessage(`Loaded ${result.count} description record(s).`);
-		} catch (err) {
-			setError(formatError(err, "Failed to load SQL description queue."));
-		} finally {
-			setIsLoadingQueue(false);
-		}
-	};
+		void loadHierarchy();
+	}, []);
 
 	useEffect(() => {
-		void loadQueue();
-		// Initial load to prevent an empty queue panel on first open.
-		// eslint-disable-next-line react-hooks/exhaustive-deps
-	}, []);
+		setSelectedSubDomainId("");
+	}, [selectedDomainId]);
 
 	const loadCatalog = async () => {
 		setIsLoadingCatalog(true);
@@ -127,20 +87,25 @@ export default function SQLForm() {
 	const submit = async () => {
 		setIsOnboarding(true);
 		setError("");
-		setOnboardResponse(null);
-		setStatusMessage("");
+		setStatusMessage("SQL onboarding started. Processing in background...");
 
 		try {
 			const payload = {
 				connection_string: connectionString.trim(),
 				delta_only: deltaOnly,
+				sub_domain_id: selectedSubDomainId,
+				...(selectedDomainId ? { domain_id: selectedDomainId } : {}),
 				...(selectedSchema ? { schema_name: selectedSchema } : {}),
 				...(selectedTable ? { table_name: selectedTable } : {}),
 			};
 
 			const result = await onboardSQL(payload);
-			setOnboardResponse(result);
-			setStatusMessage(result.message);
+			const processedNodes = result.result?.ontology_count;
+			if (typeof processedNodes === "number") {
+				setStatusMessage(`${result.message} Processed ${processedNodes} node(s).`);
+			} else {
+				setStatusMessage(result.message);
+			}
 		} catch (err) {
 			setError(formatError(err, "SQL onboarding failed."));
 		} finally {
@@ -148,30 +113,18 @@ export default function SQLForm() {
 		}
 	};
 
-	const loadDiagnostics = async () => {
-		setIsLoadingDiagnostics(true);
-		setError("");
-		setDiagnostics(null);
-
-		try {
-			const result = await getSQLDescriptionsDiagnostics({
-				connection_string: connectionString.trim() || null,
-			});
-			setDiagnostics(result);
-		} catch (err) {
-			setError(formatError(err, "Failed to load diagnostics."));
-		} finally {
-			setIsLoadingDiagnostics(false);
-		}
-	};
-
 	return (
 		<div className="space-y-6">
 			<SQLOnboardingPanel
+				domains={domains}
+				selectedDomainId={selectedDomainId}
+				onSelectedDomainIdChange={setSelectedDomainId}
+				selectedSubDomainId={selectedSubDomainId}
+				onSelectedSubDomainIdChange={setSelectedSubDomainId}
+				isLoadingHierarchy={isLoadingHierarchy}
 				connectionString={connectionString}
 				onConnectionStringChange={setConnectionString}
 				isOnboarding={isOnboarding}
-				isLoadingQueue={isLoadingQueue}
 				isLoadingCatalog={isLoadingCatalog}
 				catalog={catalog}
 				selectedSchema={selectedSchema}
@@ -182,28 +135,6 @@ export default function SQLForm() {
 				onDeltaOnlyChange={setDeltaOnly}
 				onSubmit={submit}
 				onLoadCatalog={loadCatalog}
-				onLoadQueue={loadQueue}
-				onboardResponse={onboardResponse}
-			/>
-
-			<SQLReviewQueuePanel
-				approvedFilter={approvedFilter}
-				onApprovedFilterChange={setApprovedFilter}
-				databaseFilter={databaseFilter}
-				onDatabaseFilterChange={setDatabaseFilter}
-				schemaFilter={schemaFilter}
-				onSchemaFilterChange={setSchemaFilter}
-				tableFilter={tableFilter}
-				onTableFilterChange={setTableFilter}
-				queueLimit={queueLimit}
-				onQueueLimitChange={setQueueLimit}
-				filteredQueue={filteredQueue}
-			/>
-
-			<SQLDiagnosticsPanel
-				isLoadingDiagnostics={isLoadingDiagnostics}
-				onLoadDiagnostics={loadDiagnostics}
-				diagnostics={diagnostics}
 			/>
 
 			{statusMessage ? <p className="alert-success text-sm">{statusMessage}</p> : null}

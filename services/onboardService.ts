@@ -6,10 +6,6 @@ import type {
 	CosmosOnboardResponse,
 	KafkaOnboardRequest,
 	KafkaOnboardResponse,
-	SQLDescriptionListRequest,
-	SQLDescriptionListResponse,
-	SQLDescriptionsDiagnosticsRequest,
-	SQLDescriptionsDiagnosticsResponse,
 	SQLOnboardRequest,
 	SQLOnboardResponse,
 } from "@/types/api";
@@ -23,19 +19,6 @@ export const onboardSQL = async (
 	payload: SQLOnboardRequest,
 ): Promise<SQLOnboardResponse> =>
 	api.post<SQLOnboardResponse>("/api/onboard/sql", payload);
-
-export const listSQLDescriptions = async (
-	payload: SQLDescriptionListRequest,
-): Promise<SQLDescriptionListResponse> =>
-	api.post<SQLDescriptionListResponse>("/api/onboard/sql/descriptions/list", payload);
-
-export const getSQLDescriptionsDiagnostics = async (
-	payload: SQLDescriptionsDiagnosticsRequest,
-): Promise<SQLDescriptionsDiagnosticsResponse> =>
-	api.post<SQLDescriptionsDiagnosticsResponse>(
-		"/api/onboard/sql/descriptions/diagnostics",
-		payload,
-	);
 
 export const onboardCosmos = async (
 	payload: CosmosOnboardRequest,

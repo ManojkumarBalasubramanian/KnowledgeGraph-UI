@@ -30,15 +30,16 @@ npm run dev
 ```
 
 4. Open `http://localhost:3000`.
+	For access from other machines on your network, open `http://<your-lan-ip>:3000` (for example `http://192.168.1.90:3000`).
 
 ## Feature Routes
 
 - `/` Overview and platform entry point
 - `/dashboard` Health probes, graph stats, schema, and metrics preview
-- `/graph` Metadata Explorer with schema-based hierarchy, column-level editing, and bulk updates
+- `/graph` Metadata Manager with schema-based hierarchy, column-level editing, and bulk updates
 - `/node-search` Node search (`/api/graph/nodes/search`)
 - `/llm` LLM Studio (`/api/llm/generate`, `/api/llm/answer`)
-- `/relationships` Graph relationship manager (`/api/relationship/manual`)
+- `/relationships` Graph relationship manager with PK/FK relationships and custom relationships
 - `/onboard/sql` SQL metadata onboarding
 - `/onboard/cosmos` Cosmos DB onboarding
 - `/onboard/kafka` Kafka onboarding

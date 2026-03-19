@@ -6,23 +6,8 @@ import { usePathname } from "next/navigation";
 
 const mainCategories = [
 	{
-		heading: "LLM Studio",
-		links: [{ href: "/llm", label: "LLM Workspace" }],
-	},
-	{
-		heading: "Platform",
-		links: [
-			{ href: "/", label: "Overview" },
-			{ href: "/dashboard", label: "Operations" },
-		],
-	},
-	{
-		heading: "Knowledge Graph",
-		links: [
-			{ href: "/graph", label: "Metadata Explorer" },
-			{ href: "/relationships", label: "Relationships" },
-			{ href: "/node-search", label: "Node Search" },
-		],
+		heading: "Overview",
+		links: [{ href: "/", label: "Overview" }],
 	},
 	{
 		heading: "Onboarding",
@@ -32,6 +17,22 @@ const mainCategories = [
 			{ href: "/onboard/kafka", label: "Kafka" },
 		],
 	},
+	{
+		heading: "Knowledge Graph",
+		links: [
+			{ href: "/graph", label: "Metadata Manager" },
+			{ href: "/relationships", label: "Relationships" },
+			{ href: "/node-search", label: "Node Search" },
+		],
+	},
+	{
+		heading: "LLM Playground",
+		links: [{ href: "/llm", label: "LLM Workspace" }],
+	},
+	{
+		heading: "Operations",
+		links: [{ href: "/dashboard", label: "Dashboard" }],
+	},
 ];
 
 export default function Sidebar() {
@@ -40,12 +41,10 @@ export default function Sidebar() {
 		() =>
 			mainCategories.find((category) =>
 				category.links.some((link) => link.href === pathname),
-			)?.heading || mainCategories[0].heading,
+			)?.heading ?? mainCategories[0].heading,
 		[pathname],
 	);
-	const [selectedCategory, setSelectedCategory] = useState(activeCategory);
-
-	const visibleCategory = selectedCategory || activeCategory;
+	const [expandedCategory, setExpandedCategory] = useState(activeCategory);
 
 	return (
 		<aside className="w-full border-b border-blue-200 bg-[#003a8c] text-blue-50 md:min-h-[calc(100vh-4rem)] md:w-72 md:border-b-0 md:border-r md:border-r-blue-900/50">
@@ -53,16 +52,40 @@ export default function Sidebar() {
 				<p className="text-xs uppercase tracking-[0.24em] text-blue-100/70">Navigate</p>
 				<div className="mt-4 space-y-3">
 					{mainCategories.map((category) => {
-						const isSelected = visibleCategory === category.heading;
+						const isSingleLink = category.links.length === 1;
 						const categoryHasActive = category.links.some((link) => link.href === pathname);
+						const isExpanded = expandedCategory === category.heading;
 
+						// Single-link categories navigate directly — no nesting
+						if (isSingleLink) {
+							const link = category.links[0];
+							const active = pathname === link.href;
+							return (
+								<div key={category.heading}>
+									<Link
+										href={link.href}
+										className={`block w-full rounded-lg px-3 py-2 text-left text-sm font-semibold transition ${
+											active
+												? "bg-gradient-to-r from-[#005cb9] via-[#1b73cf] to-[#e32934] text-white"
+												: "text-blue-100/90 hover:bg-blue-800/60 hover:text-white"
+										}`}
+									>
+										{category.heading}
+									</Link>
+								</div>
+							);
+						}
+
+						// Multi-link categories expand to show sub-links
 						return (
 							<div key={category.heading}>
 								<button
 									type="button"
-									onClick={() => setSelectedCategory(category.heading)}
+									onClick={() =>
+										setExpandedCategory(isExpanded ? "" : category.heading)
+									}
 									className={`w-full rounded-lg px-3 py-2 text-left text-sm font-semibold transition ${
-										isSelected || categoryHasActive
+										isExpanded || categoryHasActive
 											? "bg-gradient-to-r from-[#005cb9] via-[#1b73cf] to-[#e32934] text-white"
 											: "text-blue-100/90 hover:bg-blue-800/60 hover:text-white"
 									}`}
@@ -70,7 +93,7 @@ export default function Sidebar() {
 									{category.heading}
 								</button>
 
-								{isSelected ? (
+								{isExpanded ? (
 									<ul className="mt-2 grid grid-cols-2 gap-2 md:grid-cols-1">
 										{category.links.map((link) => {
 											const active = pathname === link.href;

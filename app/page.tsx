@@ -12,7 +12,7 @@ const featureCards = [
     description: "Monitor liveness, readiness, schema, and Prometheus metrics.",
   },
   {
-    title: "Metadata Explorer",
+    title: "Metadata Manager",
     href: "/graph",
     description: "Inspect nodes and relationships, run Cypher, and review results.",
   },
