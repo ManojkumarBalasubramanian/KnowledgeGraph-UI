@@ -1,5 +1,6 @@
 import type {
 	MetadataExplorerDomain,
+	MetadataExplorerSubDomain,
 	SQLCatalogSchema,
 } from "@/types/api";
 
@@ -12,6 +13,7 @@ export interface SQLOnboardingPanelProps {
 	onSelectedDomainIdChange: ValueChangeHandler<string>;
 	selectedSubDomainId: string;
 	onSelectedSubDomainIdChange: ValueChangeHandler<string>;
+	subDomains: MetadataExplorerSubDomain[];
 	isLoadingHierarchy: boolean;
 	connectionString: string;
 	onConnectionStringChange: ValueChangeHandler<string>;

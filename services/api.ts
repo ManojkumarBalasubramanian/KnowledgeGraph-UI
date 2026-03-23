@@ -13,6 +13,16 @@ export class APIRequestError extends Error {
 	}
 }
 
+export const formatAPIError = (err: unknown, fallbackMessage: string): string => {
+	if (err instanceof APIRequestError) {
+		return typeof err.detail === "string"
+			? err.detail
+			: JSON.stringify(err.detail, null, 2);
+	}
+
+	return fallbackMessage;
+};
+
 export async function apiRequest<T>(
 	endpoint: string,
 	options: RequestInit = {},

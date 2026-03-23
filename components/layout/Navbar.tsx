@@ -12,10 +12,10 @@ export default function Navbar() {
 			<div className="mx-auto flex h-16 max-w-7xl items-center justify-between px-4 md:px-6">
 				<div>
 					<p className="text-xs uppercase tracking-[0.22em] text-blue-700/70">
-							Cognitive Metadata Platform
+							Enterprise Data Governance
 					</p>
 					<h1 className="font-display text-lg font-semibold text-blue-950">
-						Metadata Discovery Hub
+						Cognitive AI Platform
 					</h1>
 				</div>
 

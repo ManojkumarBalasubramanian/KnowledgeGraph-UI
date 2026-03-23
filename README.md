@@ -1,6 +1,6 @@
-# Metadata Discovery Hub
+# Cognitive AI Platform
 
-Frontend control plane for the Cognitive Metadata Platform.
+Frontend control plane for Enterprise Data Governance.
 
 ## Stack
 
@@ -36,8 +36,8 @@ npm run dev
 
 - `/` Overview and platform entry point
 - `/dashboard` Health probes, graph stats, schema, and metrics preview
-- `/graph` Metadata Manager with schema-based hierarchy, column-level editing, and bulk updates
-- `/node-search` Node search (`/api/graph/nodes/search`)
+- `/graph` Data Governance with schema-based hierarchy, column-level editing, and bulk updates
+- `/node-search` SQL column grid with filters for server, Domain, Sub Domain, database, and table (`/api/graph/query`, `/api/graph/metadata-explorer/hierarchy`)
 - `/llm` LLM Studio (`/api/llm/generate`, `/api/llm/answer`)
 - `/relationships` Graph relationship manager with PK/FK relationships and custom relationships
 - `/onboard/sql` SQL metadata onboarding
@@ -58,6 +58,24 @@ Service clients:
 - `services/onboardService.ts`
 - `services/llmService.ts`
 - `services/relationshipService.ts`
+
+## Reusable Structure
+
+Common onboarding code is centralized to keep the forms simple and consistent:
+
+- `hooks/useMetadataHierarchy.ts` loads the Domain/Sub Domain hierarchy and manages selection state
+- `components/onboarding/shared/DomainSubDomainFields.tsx` renders the shared Domain/Sub Domain selector UI
+- `services/api.ts` exposes `formatAPIError` so forms can handle backend errors consistently
+
+This shared structure is used by the SQL Server, Cosmos DB, and Kafka onboarding flows without changing their existing API contracts.
+
+## Backend Contract Compatibility
+
+Frontend is aligned to support the latest hierarchy and onboarding backend updates:
+
+- Hierarchy API compatibility: supports both legacy `{ domains: [...] }` and new `{ enterprises: [...], domains: [...] }` response shapes from `/api/graph/metadata-explorer/hierarchy`
+- Onboarding payload enrichment: SQL, Cosmos, and Kafka onboarding now include optional `enterprise_id` when it can be resolved from selected domain/sub-domain hierarchy context
+- Existing behavior remains intact when enterprise context is not available
 
 ## Validation
 

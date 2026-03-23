@@ -20,7 +20,7 @@ const mainCategories = [
 	{
 		heading: "Knowledge Graph",
 		links: [
-			{ href: "/graph", label: "Metadata Manager" },
+			{ href: "/graph", label: "Data Governance" },
 			{ href: "/relationships", label: "Relationships" },
 			{ href: "/node-search", label: "Node Search" },
 		],
@@ -31,7 +31,10 @@ const mainCategories = [
 	},
 	{
 		heading: "Operations",
-		links: [{ href: "/dashboard", label: "Dashboard" }],
+		links: [
+			{ href: "/operations", label: "Hierarchy Management" },
+			{ href: "/dashboard", label: "Dashboard" },
+		],
 	},
 ];
 

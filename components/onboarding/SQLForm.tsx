@@ -1,23 +1,14 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { APIRequestError } from "@/services/api";
-import { getMetadataExplorerHierarchy } from "@/services/graphService";
-import {
-	fetchSQLCatalog,
-	onboardSQL,
-} from "@/services/onboardService";
-import type {
-	SQLCatalogSchema,
-	MetadataExplorerDomain,
-} from "@/types/api";
+import { useMetadataHierarchy } from "@/hooks/useMetadataHierarchy";
+import { formatAPIError } from "@/services/api";
+import { fetchSQLCatalog, onboardSQL } from "@/services/onboardService";
+import type { SQLCatalogSchema } from "@/types/api";
 import SQLOnboardingPanel from "./sql/SQLOnboardingPanel";
 
 export default function SQLForm() {
 	const [connectionString, setConnectionString] = useState("");
-	const [domains, setDomains] = useState<MetadataExplorerDomain[]>([]);
-	const [selectedDomainId, setSelectedDomainId] = useState("");
-	const [selectedSubDomainId, setSelectedSubDomainId] = useState("");
 	const [catalog, setCatalog] = useState<SQLCatalogSchema[]>([]);
 	const [selectedSchema, setSelectedSchema] = useState("");
 	const [selectedTable, setSelectedTable] = useState("");
@@ -25,42 +16,26 @@ export default function SQLForm() {
 
 	const [isOnboarding, setIsOnboarding] = useState(false);
 	const [isLoadingCatalog, setIsLoadingCatalog] = useState(false);
-	const [isLoadingHierarchy, setIsLoadingHierarchy] = useState(false);
 
 	const [statusMessage, setStatusMessage] = useState("");
 	const [error, setError] = useState("");
+	const {
+		domains,
+		selectedDomainId,
+		setSelectedDomainId,
+		selectedSubDomainId,
+		setSelectedSubDomainId,
+		selectedEnterpriseId,
+		subDomains,
+		isLoadingHierarchy,
+		hierarchyError,
+	} = useMetadataHierarchy();
 
-	const formatError = (err: unknown, fallbackMessage: string): string => {
-		if (err instanceof APIRequestError) {
-			return typeof err.detail === "string"
-				? err.detail
-				: JSON.stringify(err.detail, null, 2);
+	useEffect(() => {
+		if (hierarchyError) {
+			setError(hierarchyError);
 		}
-
-		return fallbackMessage;
-	};
-
-	useEffect(() => {
-		const loadHierarchy = async () => {
-			setIsLoadingHierarchy(true);
-			setError("");
-
-			try {
-				const result = await getMetadataExplorerHierarchy();
-				setDomains(result.domains);
-			} catch (err) {
-				setError(formatError(err, "Failed to load Domain/Sub Domain hierarchy."));
-			} finally {
-				setIsLoadingHierarchy(false);
-			}
-		};
-
-		void loadHierarchy();
-	}, []);
-
-	useEffect(() => {
-		setSelectedSubDomainId("");
-	}, [selectedDomainId]);
+	}, [hierarchyError]);
 
 	const loadCatalog = async () => {
 		setIsLoadingCatalog(true);
@@ -73,7 +48,7 @@ export default function SQLForm() {
 			setSelectedTable("");
 			setStatusMessage(`Loaded ${result.schemas.length} schema(s).`);
 		} catch (err) {
-			setError(formatError(err, "Failed to load schema/table catalog."));
+			setError(formatAPIError(err, "Failed to load schema/table catalog."));
 		} finally {
 			setIsLoadingCatalog(false);
 		}
@@ -94,6 +69,7 @@ export default function SQLForm() {
 				connection_string: connectionString.trim(),
 				delta_only: deltaOnly,
 				sub_domain_id: selectedSubDomainId,
+				...(selectedEnterpriseId ? { enterprise_id: selectedEnterpriseId } : {}),
 				...(selectedDomainId ? { domain_id: selectedDomainId } : {}),
 				...(selectedSchema ? { schema_name: selectedSchema } : {}),
 				...(selectedTable ? { table_name: selectedTable } : {}),
@@ -107,7 +83,7 @@ export default function SQLForm() {
 				setStatusMessage(result.message);
 			}
 		} catch (err) {
-			setError(formatError(err, "SQL onboarding failed."));
+			setError(formatAPIError(err, "SQL onboarding failed."));
 		} finally {
 			setIsOnboarding(false);
 		}
@@ -121,6 +97,7 @@ export default function SQLForm() {
 				onSelectedDomainIdChange={setSelectedDomainId}
 				selectedSubDomainId={selectedSubDomainId}
 				onSelectedSubDomainIdChange={setSelectedSubDomainId}
+				subDomains={subDomains}
 				isLoadingHierarchy={isLoadingHierarchy}
 				connectionString={connectionString}
 				onConnectionStringChange={setConnectionString}

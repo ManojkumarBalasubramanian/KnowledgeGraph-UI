@@ -99,7 +99,7 @@ export default function GraphPage() {
 							: JSON.stringify(err.detail, null, 2),
 					);
 				} else {
-					setError("Failed to load Metadata Manager hierarchy.");
+					setError("Failed to load Data Governance hierarchy.");
 				}
 			} finally {
 				setIsLoadingHierarchy(false);
@@ -393,7 +393,7 @@ export default function GraphPage() {
 	return (
 		<div className="space-y-5">
 			<section className="surface p-6">
-				<h2 className="font-display text-3xl text-blue-950">Metadata Manager</h2>
+				<h2 className="font-display text-3xl text-blue-950">Data Governance</h2>
 				<p className="mt-1 text-sm text-blue-900/75">
 					Navigate Domain to Sub Domain to Database or Cosmos Database and inspect metadata
 					nodes with steward-ready descriptions.

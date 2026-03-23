@@ -12,7 +12,7 @@ const featureCards = [
     description: "Monitor liveness, readiness, schema, and Prometheus metrics.",
   },
   {
-    title: "Metadata Manager",
+    title: "Data Governance",
     href: "/graph",
     description: "Inspect nodes and relationships, run Cypher, and review results.",
   },
@@ -56,8 +56,8 @@ export default function Home() {
     <div className="space-y-6">
       <section className="surface overflow-hidden">
         <div className="bg-gradient-to-r from-[#003a8c] via-[#005cb9] to-[#e32934] p-7 text-white">
-          <p className="text-sm uppercase tracking-[0.22em] text-blue-100">PepsiCo Supply Chain Hub</p>
-          <h2 className="mt-2 text-4xl font-semibold">Enterprise Knowledge Graph</h2>
+          <p className="text-sm uppercase tracking-[0.22em] text-blue-100">PepsiCo Enterprise</p>
+          <h2 className="mt-2 text-4xl font-semibold">Semantic Network</h2>
           <p className="mt-3 max-w-2xl text-blue-50">
             Built to explore and manage knowledge graph with ease. Dive into the graph, run queries, and leverage AI-powered insights to unlock the full potential of your data.
           </p>

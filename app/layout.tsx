@@ -23,7 +23,7 @@ const monoFont = IBM_Plex_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "Cognitive Metadata Platform",
+  title: "Enterprise Data Governance",
   description: "Frontend control plane for graph metadata onboarding and exploration",
 };
 

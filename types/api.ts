@@ -154,8 +154,15 @@ export interface MetadataExplorerDomain {
   sub_domains: MetadataExplorerSubDomain[];
 }
 
+export interface MetadataExplorerEnterprise {
+  id: string;
+  name: string;
+  domains: MetadataExplorerDomain[];
+}
+
 export interface MetadataExplorerHierarchyResponse {
   domains: MetadataExplorerDomain[];
+  enterprises?: MetadataExplorerEnterprise[];
 }
 
 export interface MetadataApprovedDescription {
@@ -204,6 +211,7 @@ export interface SQLOnboardRequest {
   schema_name?: string;
   table_name?: string;
   delta_only?: boolean;
+  enterprise_id?: string;
   domain_id?: string;
   sub_domain_id?: string;
 }
@@ -241,6 +249,7 @@ export interface CosmosOnboardRequest {
   uri: string;
   key: string;
   database_name: string;
+  enterprise_id?: string;
   domain_id?: string;
   sub_domain_id?: string;
 }
@@ -252,6 +261,7 @@ export interface CosmosOnboardResponse {
 
 export interface KafkaOnboardRequest {
   bootstrap_servers: string;
+  enterprise_id?: string;
   domain_id?: string;
   sub_domain_id?: string;
 }
@@ -259,6 +269,40 @@ export interface KafkaOnboardRequest {
 export interface KafkaOnboardResponse {
   message: string;
   topics_onboarded: number;
+}
+
+export interface CreateDomainRequest {
+  domain_id: string;
+  name: string;
+  description?: string;
+  enterprise_id?: string;
+}
+
+export interface CreateDomainResponse {
+  message: string;
+  domain_id: string;
+  domain_name: string;
+  enterprise_link?: {
+    enterprise_id: string;
+    relationship_type: string;
+  };
+}
+
+export interface CreateSubDomainRequest {
+  sub_domain_id: string;
+  name: string;
+  description?: string;
+  domain_id?: string;
+}
+
+export interface CreateSubDomainResponse {
+  message: string;
+  sub_domain_id: string;
+  sub_domain_name: string;
+  domain_link?: {
+    domain_id: string;
+    relationship_type: string;
+  };
 }
 
 export interface ManualRelationshipRequest {
