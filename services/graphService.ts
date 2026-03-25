@@ -11,12 +11,18 @@ import type {
 	GraphSchema,
 	GraphStats,
 	GraphVisualization,
+	MetadataAssetType,
 	MetadataBulkUpdateColumnDescriptionsRequest,
+	MetadataExplorerAsset,
 	MetadataExplorerDomain,
 	MetadataExplorerEnterprise,
+	MetadataExplorerSchema,
+	MetadataExplorerStore,
+	MetadataExplorerSubDomain,
 	MessageResponse,
 	MetadataAssetDetailResponse,
 	MetadataExplorerHierarchyResponse,
+	MetadataStoreType,
 	MetadataProcessApprovedDescriptionsRequest,
 	NodeSearchRequest,
 	NodeSearchResponse,
@@ -95,7 +101,7 @@ const extractHierarchyRoot = (
 	return null;
 };
 
-const normalizeAsset = (asset: unknown, index: number) => {
+const normalizeAsset = (asset: unknown, index: number): MetadataExplorerAsset | null => {
 	if (!isRecord(asset)) {
 		return null;
 	}
@@ -103,12 +109,12 @@ const normalizeAsset = (asset: unknown, index: number) => {
 	const id = readString(asset, ["id", "asset_id", "table_id", "collection_id"], `asset-${index}`);
 	const name = readString(asset, ["name", "asset_name", "table_name", "collection_name"], id);
 	const assetTypeRaw = readString(asset, ["asset_type", "type"], "Table");
-	const asset_type = assetTypeRaw === "Collection" ? "Collection" : "Table";
+	const asset_type: MetadataAssetType = assetTypeRaw === "Collection" ? "Collection" : "Table";
 
 	return { id, name, asset_type };
 };
 
-const normalizeSchema = (schema: unknown, index: number) => {
+const normalizeSchema = (schema: unknown, index: number): MetadataExplorerSchema | null => {
 	if (!isRecord(schema)) {
 		return null;
 	}
@@ -123,7 +129,7 @@ const normalizeSchema = (schema: unknown, index: number) => {
 	return { id, name, assets };
 };
 
-const normalizeStore = (store: unknown, index: number) => {
+const normalizeStore = (store: unknown, index: number): MetadataExplorerStore | null => {
 	if (!isRecord(store)) {
 		return null;
 	}
@@ -131,7 +137,8 @@ const normalizeStore = (store: unknown, index: number) => {
 	const id = readString(store, ["id", "store_id", "database_id"], `store-${index}`);
 	const name = readString(store, ["name", "store_name", "database_name"], id);
 	const storeTypeRaw = readString(store, ["store_type", "type"], "Database");
-	const store_type = storeTypeRaw === "CosmosDatabase" ? "CosmosDatabase" : "Database";
+	const store_type: MetadataStoreType =
+		storeTypeRaw === "CosmosDatabase" ? "CosmosDatabase" : "Database";
 	const schemasRaw = readArray(store, ["schemas"]);
 	const schemas = schemasRaw
 		.map((schema, schemaIndex) => normalizeSchema(schema, schemaIndex))
@@ -140,7 +147,10 @@ const normalizeStore = (store: unknown, index: number) => {
 	return { id, name, store_type, schemas };
 };
 
-const normalizeSubDomain = (subDomain: unknown, index: number) => {
+const normalizeSubDomain = (
+	subDomain: unknown,
+	index: number,
+): MetadataExplorerSubDomain | null => {
 	if (!isRecord(subDomain)) {
 		return null;
 	}

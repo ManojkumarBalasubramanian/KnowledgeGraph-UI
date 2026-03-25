@@ -1,5 +1,7 @@
 import { api } from "./api";
 import type {
+  GraphRAGRequest,
+  GraphRAGResponse,
   LLMAnswerResponse,
   LLMRequest,
   LLMResponse,
@@ -13,3 +15,8 @@ export const getSimpleLLMAnswer = async (
   prompt: string,
 ): Promise<LLMAnswerResponse> =>
   api.post<LLMAnswerResponse>("/api/llm/answer", { prompt });
+
+export const getGraphRAGAnswer = async (
+  payload: GraphRAGRequest,
+): Promise<GraphRAGResponse> =>
+  api.post<GraphRAGResponse>("/api/llm/graphrag", payload);

@@ -57,7 +57,7 @@ export default function Home() {
       <section className="surface overflow-hidden">
         <div className="bg-gradient-to-r from-[#003a8c] via-[#005cb9] to-[#e32934] p-7 text-white">
           <p className="text-sm uppercase tracking-[0.22em] text-blue-100">PepsiCo Enterprise</p>
-          <h2 className="mt-2 text-4xl font-semibold">Semantic Network</h2>
+          <h2 className="mt-2 text-4xl font-semibold">Contextual Data Intelligence</h2>
           <p className="mt-3 max-w-2xl text-blue-50">
             Built to explore and manage knowledge graph with ease. Dive into the graph, run queries, and leverage AI-powered insights to unlock the full potential of your data.
           </p>

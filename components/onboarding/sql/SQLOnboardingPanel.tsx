@@ -20,6 +20,15 @@ export default function SQLOnboardingPanel({
 	onSelectedTableChange,
 	deltaOnly,
 	onDeltaOnlyChange,
+	advancedPerformanceEnabled,
+	onAdvancedPerformanceEnabledChange,
+	parallelEnabledSelection,
+	onParallelEnabledSelectionChange,
+	maxWorkersInput,
+	onMaxWorkersInputChange,
+	rollupBatchEnabledSelection,
+	onRollupBatchEnabledSelectionChange,
+	optimizationMessage,
 	onSubmit,
 	onLoadCatalog,
 }: SQLOnboardingPanelProps) {
@@ -108,6 +117,91 @@ export default function SQLOnboardingPanel({
 				</span>
 			</label>
 
+			<details className="rounded-xl border border-blue-200 bg-blue-50/60 p-4">
+				<summary className="cursor-pointer select-none font-medium text-blue-950">
+					Advanced Performance
+				</summary>
+				<div className="mt-3 space-y-3">
+					<label className="flex items-start gap-2 text-sm text-blue-900">
+						<input
+							checked={advancedPerformanceEnabled}
+							className="mt-1"
+							onChange={(event) =>
+								onAdvancedPerformanceEnabledChange(event.target.checked)
+							}
+							type="checkbox"
+						/>
+						<span>
+							<span className="block font-medium">Enable request-level performance overrides</span>
+							<span className="text-xs text-blue-900/75">
+								If disabled, the API uses backend defaults and no optimization fields are sent.
+							</span>
+						</span>
+					</label>
+
+					<div className="grid gap-3 md:grid-cols-3">
+						<label className="space-y-1 text-sm text-blue-900">
+							<span className="font-medium">Parallel processing</span>
+							<select
+								className="select-field"
+								disabled={!advancedPerformanceEnabled}
+								value={parallelEnabledSelection}
+								onChange={(event) =>
+									onParallelEnabledSelectionChange(
+										event.target.value as "" | "true" | "false",
+									)
+								}
+							>
+								<option value="">Use backend default</option>
+								<option value="true">Enabled</option>
+								<option value="false">Disabled</option>
+							</select>
+							<p className="text-xs text-blue-900/75">
+								Parallel increases throughput for large schemas.
+							</p>
+						</label>
+
+						<label className="space-y-1 text-sm text-blue-900">
+							<span className="font-medium">Max workers</span>
+							<input
+								className="input-field"
+								disabled={!advancedPerformanceEnabled}
+								inputMode="numeric"
+								max={32}
+								min={1}
+								onChange={(event) => onMaxWorkersInputChange(event.target.value)}
+								placeholder="Use backend default"
+								value={maxWorkersInput}
+							/>
+							<p className="text-xs text-blue-900/75">
+								Higher max workers can increase API/database pressure.
+							</p>
+						</label>
+
+						<label className="space-y-1 text-sm text-blue-900">
+							<span className="font-medium">Batch rollup refresh</span>
+							<select
+								className="select-field"
+								disabled={!advancedPerformanceEnabled}
+								value={rollupBatchEnabledSelection}
+								onChange={(event) =>
+									onRollupBatchEnabledSelectionChange(
+										event.target.value as "" | "true" | "false",
+									)
+								}
+							>
+								<option value="">Use backend default</option>
+								<option value="true">Enabled</option>
+								<option value="false">Disabled</option>
+							</select>
+							<p className="text-xs text-blue-900/75">
+								Batch rollup reduces repeated parent-level recompute work.
+							</p>
+						</label>
+					</div>
+				</div>
+			</details>
+
 			<div className="flex flex-wrap items-center gap-3">
 				<button
 					className="btn-primary"
@@ -118,6 +212,13 @@ export default function SQLOnboardingPanel({
 					{isOnboarding ? "Running..." : "Start SQL Onboarding"}
 				</button>
 			</div>
+
+			{optimizationMessage ? (
+				<div className="rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-900">
+					<p className="font-semibold">Effective runtime optimization</p>
+					<p className="mt-1">{optimizationMessage}</p>
+				</div>
+			) : null}
 		</section>
 	);
 }

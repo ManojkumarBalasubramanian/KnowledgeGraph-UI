@@ -13,11 +13,18 @@ export default function SQLForm() {
 	const [selectedSchema, setSelectedSchema] = useState("");
 	const [selectedTable, setSelectedTable] = useState("");
 	const [deltaOnly, setDeltaOnly] = useState(true);
+	const [advancedPerformanceEnabled, setAdvancedPerformanceEnabled] = useState(false);
+	const [parallelEnabledSelection, setParallelEnabledSelection] = useState<"" | "true" | "false">("");
+	const [maxWorkersInput, setMaxWorkersInput] = useState("");
+	const [rollupBatchEnabledSelection, setRollupBatchEnabledSelection] = useState<
+		"" | "true" | "false"
+	>("");
 
 	const [isOnboarding, setIsOnboarding] = useState(false);
 	const [isLoadingCatalog, setIsLoadingCatalog] = useState(false);
 
 	const [statusMessage, setStatusMessage] = useState("");
+	const [optimizationMessage, setOptimizationMessage] = useState("");
 	const [error, setError] = useState("");
 	const {
 		domains,
@@ -59,9 +66,47 @@ export default function SQLForm() {
 		setSelectedTable("");
 	};
 
+	const parseBooleanSelection = (
+		value: "" | "true" | "false",
+	): boolean | undefined => {
+		if (value === "true") {
+			return true;
+		}
+		if (value === "false") {
+			return false;
+		}
+		return undefined;
+	};
+
+	const validate = (): string | null => {
+		if (!selectedSubDomainId.trim()) {
+			return "Sub-domain is required.";
+		}
+
+		if (selectedTable.trim() && !selectedSchema.trim()) {
+			return "Schema is required when a table is selected.";
+		}
+
+		if (advancedPerformanceEnabled && maxWorkersInput.trim()) {
+			const parsed = Number(maxWorkersInput);
+			if (!Number.isInteger(parsed) || parsed < 1 || parsed > 32) {
+				return "Max workers must be an integer between 1 and 32.";
+			}
+		}
+
+		return null;
+	};
+
 	const submit = async () => {
+		const validationError = validate();
+		if (validationError) {
+			setError(validationError);
+			return;
+		}
+
 		setIsOnboarding(true);
 		setError("");
+		setOptimizationMessage("");
 		setStatusMessage("SQL onboarding started. Processing in background...");
 
 		try {
@@ -73,6 +118,25 @@ export default function SQLForm() {
 				...(selectedDomainId ? { domain_id: selectedDomainId } : {}),
 				...(selectedSchema ? { schema_name: selectedSchema } : {}),
 				...(selectedTable ? { table_name: selectedTable } : {}),
+				...(advancedPerformanceEnabled
+					? {
+						...(parseBooleanSelection(parallelEnabledSelection) !== undefined
+							? {
+								parallel_enabled: parseBooleanSelection(parallelEnabledSelection),
+							}
+							: {}),
+						...(parseBooleanSelection(rollupBatchEnabledSelection) !== undefined
+							? {
+								rollup_batch_enabled: parseBooleanSelection(rollupBatchEnabledSelection),
+							}
+							: {}),
+						...(maxWorkersInput.trim()
+							? {
+								max_workers: Number(maxWorkersInput),
+							}
+							: {}),
+				  }
+					: {}),
 			};
 
 			const result = await onboardSQL(payload);
@@ -81,6 +145,12 @@ export default function SQLForm() {
 				setStatusMessage(`${result.message} Processed ${processedNodes} node(s).`);
 			} else {
 				setStatusMessage(result.message);
+			}
+
+			if (result.optimization) {
+				setOptimizationMessage(
+					`Effective optimization: parallel=${result.optimization.parallel_enabled ? "on" : "off"}, max_workers=${result.optimization.max_workers}, rollup_batch=${result.optimization.rollup_batch_enabled ? "on" : "off"}.`,
+				);
 			}
 		} catch (err) {
 			setError(formatAPIError(err, "SQL onboarding failed."));
@@ -110,6 +180,15 @@ export default function SQLForm() {
 				onSelectedTableChange={setSelectedTable}
 				deltaOnly={deltaOnly}
 				onDeltaOnlyChange={setDeltaOnly}
+				advancedPerformanceEnabled={advancedPerformanceEnabled}
+				onAdvancedPerformanceEnabledChange={setAdvancedPerformanceEnabled}
+				parallelEnabledSelection={parallelEnabledSelection}
+				onParallelEnabledSelectionChange={setParallelEnabledSelection}
+				maxWorkersInput={maxWorkersInput}
+				onMaxWorkersInputChange={setMaxWorkersInput}
+				rollupBatchEnabledSelection={rollupBatchEnabledSelection}
+				onRollupBatchEnabledSelectionChange={setRollupBatchEnabledSelection}
+				optimizationMessage={optimizationMessage}
 				onSubmit={submit}
 				onLoadCatalog={loadCatalog}
 			/>

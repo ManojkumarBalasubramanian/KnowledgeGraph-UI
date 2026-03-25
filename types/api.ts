@@ -41,6 +41,25 @@ export interface LLMAnswerResponse {
   answer: string;
 }
 
+export interface GraphRAGRequest {
+  question: string;
+  top_k?: number;
+}
+
+export interface GraphRAGMetadata {
+  trace_id: string;
+  context_nodes_found: number;
+  embedding_used: boolean;
+  top_k_requested: number;
+  elapsed_ms: number;
+}
+
+export interface GraphRAGResponse {
+  response: string;
+  model: string | null;
+  graphrag: GraphRAGMetadata;
+}
+
 export interface NodeProperties {
   name?: string;
   type?: string;
@@ -214,6 +233,9 @@ export interface SQLOnboardRequest {
   enterprise_id?: string;
   domain_id?: string;
   sub_domain_id?: string;
+  parallel_enabled?: boolean;
+  max_workers?: number;
+  rollup_batch_enabled?: boolean;
 }
 
 export interface SQLOnboardResponse {
@@ -221,6 +243,22 @@ export interface SQLOnboardResponse {
   schema_name?: string | null;
   table_name?: string | null;
   delta_only?: boolean;
+  optimization?: {
+    parallel_enabled: boolean;
+    max_workers: number;
+    rollup_batch_enabled: boolean;
+  };
+  enterprise_link?: {
+    enterprise_id: string;
+    domain_id: string;
+    relationship_type: string;
+  };
+  sub_domain_link?: {
+    sub_domain_id: string;
+    asset_type: string;
+    asset_name: string;
+    relationship_type: string;
+  };
   result?: {
     database: string;
     csv_export: string;
