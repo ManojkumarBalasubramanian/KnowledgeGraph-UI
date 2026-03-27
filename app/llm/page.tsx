@@ -4,7 +4,13 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { APIRequestError } from "@/services/api";
 import { generateLLMResponse, getGraphRAGAnswer, getSimpleLLMAnswer } from "@/services/llmService";
 import { getHealth, getReadyHealth } from "@/services/systemService";
-import type { GraphRAGMetadata, GraphRAGResponse, LLMAnswerResponse, LLMResponse } from "@/types/api";
+import { orchestrateLLMChat, getLLMSessionHistory } from "@/services/llmSessionService";
+import type {
+  GraphRAGMetadata,
+  GraphRAGResponse,
+  LLMAnswerResponse,
+  LLMResponse,
+} from "@/types/api";
 
 type ChatMode = "detailed" | "simple" | "data";
 type DataChatReadiness = "checking" | "ready" | "backend-unavailable" | "dependencies-not-ready";
@@ -20,6 +26,7 @@ interface ChatMessage {
 
 interface Conversation {
 	id: string;
+	session_id: string;
 	title: string;
 	createdAt: number;
 	messages: ChatMessage[];
@@ -27,15 +34,47 @@ interface Conversation {
 
 const starterPrompt = "Explain how a knowledge graph supports metadata governance.";
 
+const SESSION_STORAGE_KEY = "llm_chat_session_id";
+
 const makeId = () =>
 	`${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
 
-const createNewConversation = (): Conversation => ({
+const createNewConversation = (sessionId?: string): Conversation => ({
 	id: makeId(),
+	session_id: sessionId ?? crypto.randomUUID?.() ?? makeId(),
 	title: "New chat",
 	createdAt: Date.now(),
 	messages: [],
 });
+
+const mapOrchestrationHistory = (history: Array<any>, mode: ChatMode): ChatMessage[] =>
+	history
+		.map((entry, idx) => {
+			if (Array.isArray(entry)) {
+				const [role, message] = entry;
+				return {
+					id: `${idx}-${Date.now()}`,
+					role: role === "llm" ? "assistant" : role,
+					text: message,
+					mode,
+				};
+			}
+
+			if (entry && typeof entry === "object") {
+				const role = (entry as any).role;
+				const message = (entry as any).message;
+				return {
+					id: `${idx}-${Date.now()}`,
+					role: role === "llm" ? "assistant" : role,
+					text: message ?? "",
+					mode,
+				};
+			}
+
+			return null;
+		})
+		.filter((item): item is ChatMessage => item !== null);
+
 
 const normalizeError = (err: unknown): string => {
 	if (err instanceof APIRequestError) {
@@ -61,6 +100,7 @@ export default function LLMPlaygroundPage() {
 	const [error, setError] = useState("");
 	const [isLoading, setIsLoading] = useState(false);
 	const [dataChatReadiness, setDataChatReadiness] = useState<DataChatReadiness>("checking");
+	const [debugRawResponse, setDebugRawResponse] = useState<any>(null);
 	const scrollAnchorRef = useRef<HTMLDivElement | null>(null);
 
 	const activeConversation = useMemo(
@@ -73,11 +113,59 @@ export default function LLMPlaygroundPage() {
 	}, [activeConversation?.messages, isLoading]);
 
 	useEffect(() => {
+		const initializeSession = async () => {
+			let sessionId = localStorage.getItem(SESSION_STORAGE_KEY);
+			if (!sessionId) {
+				sessionId = crypto.randomUUID?.() ?? makeId();
+				localStorage.setItem(SESSION_STORAGE_KEY, sessionId);
+			}
+
+			const conversation = createNewConversation(sessionId);
+			setConversations([conversation]);
+			setActiveConversationId(conversation.id);
+
+			try {
+				const data = await getLLMSessionHistory(sessionId);
+				if (Array.isArray(data.history) && data.history.length > 0) {
+					const mappedMessages = data.history.map((entry, idx) => {
+						if (Array.isArray(entry)) {
+							const [role, message] = entry;
+							return {
+								id: `${conversation.id}-${idx}`,
+								role: role === "llm" ? "assistant" : role,
+								text: message,
+								mode,
+							};
+						}
+
+						if (entry && typeof entry === "object") {
+							return {
+								id: `${conversation.id}-${idx}`,
+								role: entry.role === "llm" ? "assistant" : entry.role,
+								text: (entry as any).message ?? "",
+								mode,
+							};
+						}
+
+						return null;
+					}).filter((m): m is ChatMessage => m !== null);
+
+					setConversationMessages(conversation.id, mappedMessages);
+					setDebugRawResponse(data);
+				}
+			} catch {
+				// keep default conversation if history fails
+			}
+		};
+
+		void initializeSession();
+	}, []);
+
+	useEffect(() => {
 		if (!activeConversationId && conversations.length > 0) {
 			setActiveConversationId(conversations[0].id);
 		}
 	}, [conversations, activeConversationId]);
-
 	useEffect(() => {
 		if (mode !== "data") {
 			return;
@@ -135,6 +223,7 @@ export default function LLMPlaygroundPage() {
 
 	const createConversation = () => {
 		const conversation = createNewConversation();
+		localStorage.setItem(SESSION_STORAGE_KEY, conversation.session_id);
 		setConversations((prev) => [conversation, ...prev]);
 		setActiveConversationId(conversation.id);
 		setPrompt("");
@@ -162,26 +251,6 @@ export default function LLMPlaygroundPage() {
 		setPrompt("");
 
 		try {
-			if (mode === "detailed") {
-				const result: LLMResponse = await generateLLMResponse({
-					prompt: trimmedPrompt,
-					max_tokens: maxTokens,
-				});
-
-				const assistantMessage: ChatMessage = {
-					id: makeId(),
-					role: "assistant",
-					text: result.response || "No response text was returned.",
-					mode,
-					meta: result.tokens
-						? `model: ${result.model ?? "unknown"} | tokens: ${result.tokens.total_tokens}`
-						: `model: ${result.model ?? "unknown"}`,
-				};
-
-				setConversationMessages(activeConversation.id, [...baseMessages, assistantMessage]);
-				return;
-			}
-
 			if (mode === "data") {
 				const isReady = await checkGraphRAGReadiness();
 				if (!isReady) {
@@ -190,38 +259,101 @@ export default function LLMPlaygroundPage() {
 							? "Neo4j/backend dependency is not ready."
 							: "Backend unavailable.",
 					);
+					setIsLoading(false);
+					return;
+				}
+			}
+
+			const session_id = activeConversation.session_id;
+			let orchestration: any = null;
+			let orchestrationError: unknown = null;
+
+			try {
+				orchestration = await orchestrateLLMChat({
+					session_id,
+					user_message: trimmedPrompt,
+					mode,
+				});
+				setDebugRawResponse(orchestration);
+			} catch (err) {
+				orchestrationError = err;
+			}
+
+			const applyLegacyLLM = async () => {
+				if (mode === "detailed") {
+					const result: LLMResponse = await generateLLMResponse({
+						prompt: trimmedPrompt,
+						max_tokens: maxTokens,
+					});
+					const assistantMessage: ChatMessage = {
+						id: makeId(),
+						role: "assistant",
+						text: result.response || "No response text was returned.",
+						mode,
+						meta: result.tokens
+							? `model: ${result.model ?? "unknown"} | tokens: ${result.tokens.total_tokens}`
+							: `model: ${result.model ?? "unknown"}`,
+					};
+					setConversationMessages(activeConversation.id, [...baseMessages, assistantMessage]);
 					return;
 				}
 
-				const result: GraphRAGResponse = await getGraphRAGAnswer({
-					question: trimmedPrompt,
-					top_k: topK,
-				});
+				if (mode === "data") {
+					const result: GraphRAGResponse = await getGraphRAGAnswer({
+						question: trimmedPrompt,
+						top_k: topK,
+					});
+					const rag = result.graphrag;
+					const assistantMessage: ChatMessage = {
+						id: makeId(),
+						role: "assistant",
+						text: result.response || "No answer text was returned.",
+						mode,
+						graphrag: rag,
+						meta: `model: ${result.model ?? "unknown"} | top_k: ${rag?.top_k_requested ?? topK}`,
+					};
+					setConversationMessages(activeConversation.id, [...baseMessages, assistantMessage]);
+					return;
+				}
 
-				const rag = result.graphrag;
+				const result: LLMAnswerResponse = await getSimpleLLMAnswer(trimmedPrompt);
 				const assistantMessage: ChatMessage = {
 					id: makeId(),
 					role: "assistant",
-					text: result.response || "No answer text was returned.",
+					text: result.answer || "No answer text was returned.",
 					mode,
-					graphrag: rag,
-					meta: `model: ${result.model ?? "unknown"} | top_k: ${rag?.top_k_requested ?? topK}`,
+					meta: "endpoint: /api/llm/answer",
 				};
+				setConversationMessages(activeConversation.id, [...baseMessages, assistantMessage]);
+			};
 
+			if (orchestration && Array.isArray(orchestration.history) && orchestration.history.length > 0) {
+				const mapped = mapOrchestrationHistory(orchestration.history, mode);
+				setConversationMessages(activeConversation.id, mapped);
+				return;
+			}
+
+			if (orchestration && (orchestration.latest_response || orchestration.response)) {
+				const assistantMessage: ChatMessage = {
+					id: makeId(),
+					role: "assistant",
+					text: orchestration.latest_response ?? orchestration.response ?? "No response text was returned.",
+					mode,
+					meta: orchestration.model
+						? `model: ${orchestration.model} | finish_reason: ${orchestration.finish_reason ?? "unknown"}`
+						: undefined,
+				};
 				setConversationMessages(activeConversation.id, [...baseMessages, assistantMessage]);
 				return;
 			}
 
-			const result: LLMAnswerResponse = await getSimpleLLMAnswer(trimmedPrompt);
-			const assistantMessage: ChatMessage = {
-				id: makeId(),
-				role: "assistant",
-				text: result.answer || "No answer text was returned.",
-				mode,
-				meta: "endpoint: /api/llm/answer",
-			};
+			if (orchestrationError) {
+				// Fallback to legacy behavior if orchestrate API not available or failed.
+				await applyLegacyLLM();
+				return;
+			}
 
-			setConversationMessages(activeConversation.id, [...baseMessages, assistantMessage]);
+			await applyLegacyLLM();
 		} catch (err) {
 			setError(normalizeError(err));
 		} finally {
@@ -269,7 +401,10 @@ export default function LLMPlaygroundPage() {
 							<button
 								key={conversation.id}
 								type="button"
-								onClick={() => setActiveConversationId(conversation.id)}
+								onClick={() => {
+									localStorage.setItem(SESSION_STORAGE_KEY, conversation.session_id);
+									setActiveConversationId(conversation.id);
+								}}
 								className={`w-full rounded-xl border px-3 py-2 text-left transition ${
 									isActive
 										? "border-blue-500 bg-blue-100 text-blue-950"
@@ -336,8 +471,11 @@ export default function LLMPlaygroundPage() {
 					) : null}
 				</header>
 
-				<div className="min-h-0 flex-1 overflow-auto px-5 py-5">
-					{activeConversation && activeConversation.messages.length > 0 ? (
+				<div className="min-h-0 flex-1 overflow-auto px-5 py-5">						{debugRawResponse ? (
+							<pre className="mb-3 rounded bg-gray-100 p-2 text-xs text-gray-700 overflow-auto max-h-40 border border-gray-200">
+								<strong>Debug: Raw backend response</strong>\n{JSON.stringify(debugRawResponse, null, 2)}
+							</pre>
+						) : null}					{activeConversation && activeConversation.messages.length > 0 ? (
 						<div className="mx-auto flex max-w-4xl flex-col gap-4">
 							{activeConversation.messages.map((message) => {
 								const isUser = message.role === "user";
