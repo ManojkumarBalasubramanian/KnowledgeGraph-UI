@@ -2,7 +2,11 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import { APIRequestError } from "@/services/api";
-import { generateLLMResponse, getGraphRAGAnswer, getSimpleLLMAnswer } from "@/services/llmService";
+import {
+	generateLLMResponse,
+	getGraphRAGAnswer,
+	getSimpleLLMAnswer,
+} from "@/services/llmService";
 import { getHealth, getReadyHealth } from "@/services/systemService";
 import { orchestrateLLMChat, getLLMSessionHistory } from "@/services/llmSessionService";
 import type {
@@ -32,7 +36,7 @@ interface Conversation {
 	messages: ChatMessage[];
 }
 
-const starterPrompt = "Explain how a knowledge graph supports metadata governance.";
+const starterPrompt = "";
 
 const SESSION_STORAGE_KEY = "llm_chat_session_id";
 
@@ -250,6 +254,26 @@ export default function LLMPlaygroundPage() {
 		setConversationMessages(activeConversation.id, baseMessages);
 		setPrompt("");
 
+		const updateAssistantMessage = (
+			assistantId: string,
+			updater: (current: ChatMessage) => ChatMessage,
+		) => {
+			setConversations((prev) =>
+				prev.map((conversation) => {
+					if (conversation.id !== activeConversation.id) {
+						return conversation;
+					}
+
+					return {
+						...conversation,
+						messages: conversation.messages.map((message) =>
+							message.id === assistantId ? updater(message) : message,
+						),
+					};
+				}),
+			);
+		};
+
 		try {
 			if (mode === "data") {
 				const isReady = await checkGraphRAGReadiness();
@@ -279,81 +303,81 @@ export default function LLMPlaygroundPage() {
 				orchestrationError = err;
 			}
 
-			const applyLegacyLLM = async () => {
-				if (mode === "detailed") {
-					const result: LLMResponse = await generateLLMResponse({
-						prompt: trimmedPrompt,
-						max_tokens: maxTokens,
-					});
-					const assistantMessage: ChatMessage = {
-						id: makeId(),
-						role: "assistant",
-						text: result.response || "No response text was returned.",
-						mode,
-						meta: result.tokens
-							? `model: ${result.model ?? "unknown"} | tokens: ${result.tokens.total_tokens}`
-							: `model: ${result.model ?? "unknown"}`,
-					};
-					setConversationMessages(activeConversation.id, [...baseMessages, assistantMessage]);
-					return;
-				}
-
-				if (mode === "data") {
-					const result: GraphRAGResponse = await getGraphRAGAnswer({
-						question: trimmedPrompt,
-						top_k: topK,
-					});
-					const rag = result.graphrag;
-					const assistantMessage: ChatMessage = {
-						id: makeId(),
-						role: "assistant",
-						text: result.response || "No answer text was returned.",
-						mode,
-						graphrag: rag,
-						meta: `model: ${result.model ?? "unknown"} | top_k: ${rag?.top_k_requested ?? topK}`,
-					};
-					setConversationMessages(activeConversation.id, [...baseMessages, assistantMessage]);
-					return;
-				}
-
-				const result: LLMAnswerResponse = await getSimpleLLMAnswer(trimmedPrompt);
+		const applyLegacyLLM = async () => {
+			if (mode === "detailed") {
+				const result: LLMResponse = await generateLLMResponse({
+					prompt: trimmedPrompt,
+					max_tokens: maxTokens,
+				});
 				const assistantMessage: ChatMessage = {
 					id: makeId(),
 					role: "assistant",
-					text: result.answer || "No answer text was returned.",
+					text: result.response || "No response text was returned.",
 					mode,
-					meta: "endpoint: /api/llm/answer",
+					meta: result.tokens
+						? `model: ${result.model ?? "unknown"} | tokens: ${result.tokens.total_tokens}`
+						: `model: ${result.model ?? "unknown"}`,
 				};
 				setConversationMessages(activeConversation.id, [...baseMessages, assistantMessage]);
+				return;
+			}
+
+			if (mode === "data") {
+				const result: GraphRAGResponse = await getGraphRAGAnswer({
+					question: trimmedPrompt,
+					top_k: topK,
+				});
+				const rag = result.graphrag;
+				const assistantMessage: ChatMessage = {
+					id: makeId(),
+					role: "assistant",
+					text: result.response || "No answer text was returned.",
+					mode,
+					graphrag: rag,
+					meta: `model: ${result.model ?? "unknown"} | top_k: ${rag?.top_k_requested ?? topK}`,
+				};
+				setConversationMessages(activeConversation.id, [...baseMessages, assistantMessage]);
+				return;
+			}
+
+			const result: LLMAnswerResponse = await getSimpleLLMAnswer(trimmedPrompt);
+			const assistantMessage: ChatMessage = {
+				id: makeId(),
+				role: "assistant",
+				text: result.answer || "No answer text was returned.",
+				mode,
+				meta: "endpoint: /api/llm/answer",
 			};
+			setConversationMessages(activeConversation.id, [...baseMessages, assistantMessage]);
+		};
 
-			if (orchestration && Array.isArray(orchestration.history) && orchestration.history.length > 0) {
-				const mapped = mapOrchestrationHistory(orchestration.history, mode);
-				setConversationMessages(activeConversation.id, mapped);
-				return;
-			}
+		if (orchestration && Array.isArray(orchestration.history) && orchestration.history.length > 0) {
+			const mapped = mapOrchestrationHistory(orchestration.history, mode);
+			setConversationMessages(activeConversation.id, mapped);
+			return;
+		}
 
-			if (orchestration && (orchestration.latest_response || orchestration.response)) {
-				const assistantMessage: ChatMessage = {
-					id: makeId(),
-					role: "assistant",
-					text: orchestration.latest_response ?? orchestration.response ?? "No response text was returned.",
-					mode,
-					meta: orchestration.model
-						? `model: ${orchestration.model} | finish_reason: ${orchestration.finish_reason ?? "unknown"}`
-						: undefined,
-				};
-				setConversationMessages(activeConversation.id, [...baseMessages, assistantMessage]);
-				return;
-			}
+		if (orchestration && (orchestration.latest_response || orchestration.response)) {
+			const assistantMessage: ChatMessage = {
+				id: makeId(),
+				role: "assistant",
+				text: orchestration.latest_response ?? orchestration.response ?? "No response text was returned.",
+				mode,
+				meta: orchestration.model
+					? `model: ${orchestration.model} | finish_reason: ${orchestration.finish_reason ?? "unknown"}`
+					: undefined,
+			};
+			setConversationMessages(activeConversation.id, [...baseMessages, assistantMessage]);
+			return;
+		}
 
-			if (orchestrationError) {
-				// Fallback to legacy behavior if orchestrate API not available or failed.
-				await applyLegacyLLM();
-				return;
-			}
-
+		if (orchestrationError) {
+			// Fallback to legacy behavior if orchestrate API not available or failed.
 			await applyLegacyLLM();
+			return;
+		}
+
+		await applyLegacyLLM();
 		} catch (err) {
 			setError(normalizeError(err));
 		} finally {
@@ -428,7 +452,7 @@ export default function LLMPlaygroundPage() {
 				<header className="border-b border-blue-100 px-5 py-4">
 					<div className="flex flex-wrap items-center justify-between gap-3">
 						<div>
-							<h2 className="font-display text-2xl font-semibold text-blue-950">LLM Playground</h2>
+							<h2 className="font-display text-2xl font-semibold text-blue-950">LLM Studio</h2>
 							<p className="text-sm text-blue-700/80">
 								Chat-style interface for /api/llm/answer and /api/llm/generate.
 							</p>
@@ -559,7 +583,7 @@ export default function LLMPlaygroundPage() {
 								value={prompt}
 								onChange={(event) => setPrompt(event.target.value)}
 								onKeyDown={handleComposerKeyDown}
-								placeholder="Message LLM Playground..."
+								placeholder="Message LLM Studio..."
 								rows={3}
 								className="textarea-field min-h-20 resize-none border-0 p-2 shadow-none focus:ring-0"
 							/>

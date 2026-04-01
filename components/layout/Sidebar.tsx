@@ -8,7 +8,7 @@ const categoryIcons: Record<string, string> = {
 	Overview: "home",
 	Onboarding: "upload",
 	"Knowledge Graph": "graph",
-	"LLM Playground": "spark",
+	"LLM Studio": "spark",
 	Operations: "settings",
 };
 
@@ -101,7 +101,7 @@ const mainCategories = [
 		],
 	},
 	{
-		heading: "LLM Playground",
+		heading: "LLM Studio",
 		links: [{ href: "/llm", label: "LLM Workspace" }],
 	},
 	{

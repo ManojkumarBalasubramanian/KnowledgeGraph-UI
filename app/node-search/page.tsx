@@ -2,15 +2,11 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { formatAPIError } from "@/services/api";
-import { getMetadataExplorerHierarchy, queryGraph } from "@/services/graphService";
-import type {
-	MetadataExplorerDomain,
-	MetadataExplorerSchema,
-	MetadataExplorerStore,
-	MetadataExplorerSubDomain,
-} from "@/types/api";
+import { queryGraph } from "@/services/graphService";
 
-interface SQLColumnRow {
+type NodeSearchTab = "sql" | "cosmos";
+
+interface SQLRow {
 	key: string;
 	domain: string;
 	subDomain: string;
@@ -20,6 +16,19 @@ interface SQLColumnRow {
 	table: string;
 	column: string;
 	dataType: string;
+	businessDescription: string;
+	llmConfidence: string;
+}
+
+interface CosmosRow {
+	key: string;
+	domain: string;
+	subDomain: string;
+	database: string;
+	collection: string;
+	fieldPath: string;
+	inferredType: string;
+	nullable: string;
 	businessDescription: string;
 	llmConfidence: string;
 }
@@ -50,400 +59,557 @@ const toNumberString = (value: unknown): string => {
 	return "-";
 };
 
-export default function SubdomainsPage() {
-	const [domains, setDomains] = useState<MetadataExplorerDomain[]>([]);
-	const [selectedDomainId, setSelectedDomainId] = useState("");
-	const [selectedSubDomainId, setSelectedSubDomainId] = useState("");
-	const [selectedDatabaseId, setSelectedDatabaseId] = useState("");
-	const [selectedSchemaId, setSelectedSchemaId] = useState("");
-	const [selectedTableId, setSelectedTableId] = useState("");
-	const [rows, setRows] = useState<SQLColumnRow[]>([]);
-	const [totalCount, setTotalCount] = useState(0);
-	const [error, setError] = useState("");
-	const [isLoadingHierarchy, setIsLoadingHierarchy] = useState(false);
+const matchesExactText = (value: string, query: string): boolean =>
+	!query.trim() || value.trim().toLowerCase() === query.trim().toLowerCase();
+
+const escapeCsvValue = (value: string): string => {
+	const normalized = value.replace(/\r?\n|\r/g, " ");
+	if (/[",]/.test(normalized)) {
+		return `"${normalized.replace(/"/g, '""')}"`;
+	}
+	return normalized;
+};
+
+export default function NodeSearchPage() {
+	const [activeTab, setActiveTab] = useState<NodeSearchTab>("sql");
+	const [sqlRows, setSqlRows] = useState<SQLRow[]>([]);
+	const [cosmosRows, setCosmosRows] = useState<CosmosRow[]>([]);
+	const [sqlPage, setSqlPage] = useState(1);
+	const [cosmosPage, setCosmosPage] = useState(1);
+	const [sqlPageSize, setSqlPageSize] = useState(25);
+	const [cosmosPageSize, setCosmosPageSize] = useState(25);
 	const [isLoading, setIsLoading] = useState(false);
+	const [error, setError] = useState("");
 
-	useEffect(() => {
-		const loadHierarchy = async () => {
-			setIsLoadingHierarchy(true);
-			setError("");
+	const [sqlFilters, setSqlFilters] = useState<Record<string, string>>({
+		domain: "",
+		subDomain: "",
+		server: "",
+		database: "",
+		schema: "",
+		table: "",
+		column: "",
+		dataType: "",
+		businessDescription: "",
+		llmConfidence: "",
+	});
 
-			try {
-				const response = await getMetadataExplorerHierarchy();
-				setDomains(response.domains);
-			} catch (err) {
-				setError(formatAPIError(err, "Failed to load hierarchy."));
-			} finally {
-				setIsLoadingHierarchy(false);
-			}
-		};
+	const [cosmosFilters, setCosmosFilters] = useState<Record<string, string>>({
+		domain: "",
+		subDomain: "",
+		database: "",
+		collection: "",
+		fieldPath: "",
+		inferredType: "",
+		nullable: "",
+		businessDescription: "",
+		llmConfidence: "",
+	});
 
-		void loadHierarchy();
-	}, []);
+	const resetSqlFilters = () => {
+		setSqlFilters({
+			domain: "",
+			subDomain: "",
+			server: "",
+			database: "",
+			schema: "",
+			table: "",
+			column: "",
+			dataType: "",
+			businessDescription: "",
+			llmConfidence: "",
+		});
+	};
 
-	const selectedDomain = useMemo(
-		() => domains.find((domain) => domain.id === selectedDomainId) ?? null,
-		[domains, selectedDomainId],
-	);
+	const resetCosmosFilters = () => {
+		setCosmosFilters({
+			domain: "",
+			subDomain: "",
+			database: "",
+			collection: "",
+			fieldPath: "",
+			inferredType: "",
+			nullable: "",
+			businessDescription: "",
+			llmConfidence: "",
+		});
+	};
 
-	const availableSubDomains = useMemo(() => {
-		if (selectedDomain) {
-			return selectedDomain.sub_domains;
-		}
-		return domains.flatMap((domain) => domain.sub_domains);
-	}, [domains, selectedDomain]);
-
-	const availableDatabases = useMemo(() => {
-		const sourceSubDomains = selectedSubDomainId
-			? availableSubDomains.filter((subDomain) => subDomain.id === selectedSubDomainId)
-			: availableSubDomains;
-
-		const allStores = sourceSubDomains.flatMap((subDomain) => subDomain.stores);
-		const sqlDatabases = allStores.filter((store) => store.store_type === "Database");
-
-		const unique = new Map<string, MetadataExplorerStore>();
-		sqlDatabases.forEach((store) => {
-			if (!unique.has(store.id)) {
-				unique.set(store.id, store);
-			}
+	const loadSqlRows = async () => {
+		const response = await queryGraph({
+			query: `
+				MATCH (db:Database)-[:HAS_SCHEMA]->(s:Schema)-[:HAS_TABLE]->(t:Table)-[:HAS_COLUMN]->(c:Column)
+				OPTIONAL MATCH (sd:SubDomain)-[:USES_SQLSERVER|USES_DATABASE|USES_SQLDB|USES_DB]-(db)
+				OPTIONAL MATCH (d:Domain)-[:HAS_SUBDOMAIN|HAS_SUB_DOMAIN|BELONGS_TO_DOMAIN]-(sd)
+				RETURN
+					coalesce(d.name, 'Unassigned') AS domain,
+					coalesce(sd.name, 'Unassigned') AS subDomain,
+					coalesce(db.server_name, db.server, db.sql_server, db.host, 'Unknown') AS server,
+					coalesce(db.name, db.id, 'Unknown') AS database,
+					coalesce(s.name, s.id, 'Unknown') AS schema,
+					coalesce(t.name, t.id, 'Unknown') AS table,
+					coalesce(c.name, c.id, 'Unknown') AS column,
+					coalesce(c.data_type, c.type, '-') AS dataType,
+					coalesce(c.business_description, '-') AS businessDescription,
+					c.llm_confidence AS llmConfidence,
+					coalesce(t.id, t.name, '') + '|' + coalesce(c.id, c.name, '') AS rowKey
+				ORDER BY domain, subDomain, server, database, schema, table, column
+			`,
 		});
 
-		return Array.from(unique.values());
-	}, [availableSubDomains, selectedSubDomainId]);
+		const mappedRows: SQLRow[] = response.results.map((item, index) => ({
+			key: `${toStringValue(item.rowKey, "sql-row")}|${index}`,
+			domain: toStringValue(item.domain),
+			subDomain: toStringValue(item.subDomain),
+			server: toStringValue(item.server),
+			database: toStringValue(item.database),
+			schema: toStringValue(item.schema),
+			table: toStringValue(item.table),
+			column: toStringValue(item.column),
+			dataType: toStringValue(item.dataType),
+			businessDescription: toStringValue(item.businessDescription),
+			llmConfidence: toNumberString(item.llmConfidence),
+		}));
 
-	const availableSchemas = useMemo(() => {
-		const selectedDatabases = selectedDatabaseId
-			? availableDatabases.filter((database) => database.id === selectedDatabaseId)
-			: availableDatabases;
+		setSqlRows(mappedRows);
+	};
 
-		const schemas = selectedDatabases.flatMap((database) => database.schemas);
-		const unique = new Map<string, MetadataExplorerSchema>();
-		schemas.forEach((schema) => {
-			if (!unique.has(schema.id)) {
-				unique.set(schema.id, schema);
-			}
+	const loadCosmosRows = async () => {
+		const response = await queryGraph({
+			query: `
+				MATCH (db:CosmosDatabase)-[:HAS_COLLECTION]->(col:Collection)-[:HAS_FIELD]->(f:Field)
+				OPTIONAL MATCH (sd:SubDomain)-[:USES_COSMOSDB]-(db)
+				OPTIONAL MATCH (d:Domain)-[:HAS_SUBDOMAIN|HAS_SUB_DOMAIN|BELONGS_TO_DOMAIN]-(sd)
+				RETURN
+					coalesce(d.name, 'Unassigned') AS domain,
+					coalesce(sd.name, 'Unassigned') AS subDomain,
+					coalesce(db.name, db.id, 'Unknown') AS database,
+					coalesce(col.name, col.id, 'Unknown') AS collection,
+					coalesce(f.name, f.field_path, f.path, f.id, 'Unknown') AS fieldPath,
+					coalesce(f.inferred_type, f.data_type, f.type, '-') AS inferredType,
+					coalesce(toString(f.nullable), '-') AS nullable,
+					coalesce(toString(f.sample_count), '-') AS sampleCount,
+					coalesce(toString(f.present_count), '-') AS presentCount,
+					coalesce(f.business_description, '-') AS businessDescription,
+					f.llm_confidence AS llmConfidence,
+					coalesce(col.id, col.name, '') + '|' + coalesce(f.id, f.name, '') AS rowKey
+				ORDER BY domain, subDomain, database, collection, fieldPath
+			`,
 		});
 
-		return Array.from(unique.values());
-	}, [availableDatabases, selectedDatabaseId]);
+		const mappedRows: CosmosRow[] = response.results.map((item, index) => ({
+			key: `${toStringValue(item.rowKey, "cosmos-row")}|${index}`,
+			domain: toStringValue(item.domain),
+			subDomain: toStringValue(item.subDomain),
+			database: toStringValue(item.database),
+			collection: toStringValue(item.collection),
+			fieldPath: toStringValue(item.fieldPath),
+			inferredType: toStringValue(item.inferredType),
+			nullable: toStringValue(item.nullable),
+			businessDescription: toStringValue(item.businessDescription),
+			llmConfidence: toNumberString(item.llmConfidence),
+		}));
 
-	const availableTables = useMemo(() => {
-		const selectedDatabases = selectedDatabaseId
-			? availableDatabases.filter((database) => database.id === selectedDatabaseId)
-			: availableDatabases;
+		setCosmosRows(mappedRows);
+	};
 
-		const tables = selectedDatabases.flatMap((database) =>
-			database.schemas
-				.filter((schema) => !selectedSchemaId || schema.id === selectedSchemaId)
-				.flatMap((schema) =>
-				schema.assets
-					.filter((asset) => asset.asset_type === "Table")
-					.map((asset) => ({ id: asset.id, name: asset.name })),
-				),
-		);
-
-		const unique = new Map<string, { id: string; name: string }>();
-		tables.forEach((table) => {
-			if (!unique.has(table.id)) {
-				unique.set(table.id, table);
-			}
-		});
-
-		return Array.from(unique.values());
-	}, [availableDatabases, selectedDatabaseId, selectedSchemaId]);
-
-	const selectedSubDomain = useMemo(
-		() => availableSubDomains.find((subDomain) => subDomain.id === selectedSubDomainId) ?? null,
-		[availableSubDomains, selectedSubDomainId],
-	);
-
-	const selectedDatabase = useMemo(
-		() => availableDatabases.find((database) => database.id === selectedDatabaseId) ?? null,
-		[availableDatabases, selectedDatabaseId],
-	);
-
-	const selectedSchema = useMemo(
-		() => availableSchemas.find((schema) => schema.id === selectedSchemaId) ?? null,
-		[availableSchemas, selectedSchemaId],
-	);
-
-	const selectedTable = useMemo(
-		() => availableTables.find((table) => table.id === selectedTableId) ?? null,
-		[availableTables, selectedTableId],
-	);
-
-	const databaseScopeNames = useMemo(() => {
-		if (!(selectedDomainId || selectedSubDomainId || selectedDatabaseId)) {
-			return [] as string[];
-		}
-		return Array.from(
-			new Set(availableDatabases.map((database) => database.name).filter(Boolean)),
-		);
-	}, [availableDatabases, selectedDatabaseId, selectedDomainId, selectedSubDomainId]);
-
-	const schemaScopeNames = useMemo(() => {
-		if (!(selectedSubDomainId || selectedDatabaseId || selectedSchemaId)) {
-			return [] as string[];
-		}
-		return Array.from(new Set(availableSchemas.map((schema) => schema.name).filter(Boolean)));
-	}, [availableSchemas, selectedDatabaseId, selectedSchemaId, selectedSubDomainId]);
-
-	const tableScopeNames = useMemo(() => {
-		if (!(selectedDatabaseId || selectedSchemaId || selectedTableId)) {
-			return [] as string[];
-		}
-		return Array.from(new Set(availableTables.map((table) => table.name).filter(Boolean)));
-	}, [availableTables, selectedDatabaseId, selectedSchemaId, selectedTableId]);
-
-	useEffect(() => {
-		setSelectedSubDomainId("");
-		setSelectedDatabaseId("");
-		setSelectedSchemaId("");
-		setSelectedTableId("");
-	}, [selectedDomainId]);
-
-	useEffect(() => {
-		setSelectedDatabaseId("");
-		setSelectedSchemaId("");
-		setSelectedTableId("");
-	}, [selectedSubDomainId]);
-
-	useEffect(() => {
-		setSelectedSchemaId("");
-		setSelectedTableId("");
-	}, [selectedDatabaseId]);
-
-	useEffect(() => {
-		setSelectedTableId("");
-	}, [selectedSchemaId]);
-
-	const loadColumns = async () => {
+	const loadRows = async () => {
 		setIsLoading(true);
 		setError("");
 		try {
-			const response = await queryGraph({
-				query: `
-					MATCH (db:Database)-[:HAS_SCHEMA]->(s:Schema)-[:HAS_TABLE]->(t:Table)-[:HAS_COLUMN]->(c:Column)
-					OPTIONAL MATCH (sd:SubDomain)-[:USES_SQLSERVER]->(db)
-					OPTIONAL MATCH (d:Domain)-[:HAS_SUBDOMAIN]->(sd)
-					WHERE ($domainId = '' OR d.id = $domainId OR d.name = $domainName)
-					  AND ($subDomainId = '' OR sd.id = $subDomainId OR sd.name = $subDomainName)
-					  AND ($databaseId = '' OR db.id = $databaseId OR db.name = $databaseName)
-					  AND ($schemaId = '' OR s.id = $schemaId OR s.name = $schemaName)
-					  AND ($tableId = '' OR t.id = $tableId OR t.name = $tableName)
-					  AND (size($databaseScopeNames) = 0 OR coalesce(db.name, db.id, '') IN $databaseScopeNames)
-					  AND (size($schemaScopeNames) = 0 OR coalesce(s.name, s.id, '') IN $schemaScopeNames)
-					  AND (size($tableScopeNames) = 0 OR coalesce(t.name, t.id, '') IN $tableScopeNames)
-					RETURN
-						coalesce(d.name, 'Unassigned') AS domain,
-						coalesce(sd.name, 'Unassigned') AS subDomain,
-						coalesce(db.server_name, db.server, db.sql_server, db.host, 'Unknown') AS server,
-						coalesce(db.name, db.id, 'Unknown') AS database,
-						coalesce(s.name, s.id, 'Unknown') AS schema,
-						coalesce(t.name, t.id, 'Unknown') AS table,
-						coalesce(c.name, c.id, 'Unknown') AS column,
-						coalesce(c.data_type, c.type, '-') AS dataType,
-						coalesce(c.business_description, '-') AS businessDescription,
-						c.llm_confidence AS llmConfidence,
-						coalesce(t.id, t.name, '') + '|' + coalesce(c.id, c.name, '') AS rowKey
-					ORDER BY domain, subDomain, server, database, schema, table, column
-				`,
-				parameters: {
-					domainId: selectedDomainId,
-					domainName: selectedDomain?.name ?? "",
-					subDomainId: selectedSubDomainId,
-					subDomainName: selectedSubDomain?.name ?? "",
-					databaseId: selectedDatabaseId,
-					databaseName: selectedDatabase?.name ?? "",
-					schemaId: selectedSchemaId,
-					schemaName: selectedSchema?.name ?? "",
-					tableId: selectedTableId,
-					tableName: selectedTable?.name ?? "",
-					databaseScopeNames,
-					schemaScopeNames,
-					tableScopeNames,
-				},
-			});
-
-			const mappedRows = response.results.map((item, index) => ({
-				key: toStringValue(item.rowKey, `row-${index}`),
-				domain: toStringValue(item.domain),
-				subDomain: toStringValue(item.subDomain),
-				server: toStringValue(item.server),
-				database: toStringValue(item.database),
-				schema: toStringValue(item.schema),
-				table: toStringValue(item.table),
-				column: toStringValue(item.column),
-				dataType: toStringValue(item.dataType),
-				businessDescription: toStringValue(item.businessDescription),
-				llmConfidence: toNumberString(item.llmConfidence),
-			}));
-
-			setRows(mappedRows);
-			setTotalCount(response.count);
+			if (activeTab === "sql") {
+				await loadSqlRows();
+			} else {
+				await loadCosmosRows();
+			}
 		} catch (err) {
-			setError(formatAPIError(err, "Failed to load SQL column grid."));
-			setRows([]);
-			setTotalCount(0);
+			setError(formatAPIError(err, "Failed to load records."));
 		} finally {
 			setIsLoading(false);
 		}
 	};
 
 	useEffect(() => {
-		if (!isLoadingHierarchy) {
-			void loadColumns();
-		}
-		// Auto refresh whenever filter selection changes.
+		void loadRows();
 		// eslint-disable-next-line react-hooks/exhaustive-deps
-	}, [
-		isLoadingHierarchy,
-		selectedDomainId,
-		selectedSubDomainId,
-		selectedDatabaseId,
-		selectedSchemaId,
-		selectedTableId,
-	]);
+	}, [activeTab]);
+
+	const filteredSqlRows = useMemo(
+		() =>
+			sqlRows.filter((row) =>
+				matchesExactText(row.domain, sqlFilters.domain) &&
+				matchesExactText(row.subDomain, sqlFilters.subDomain) &&
+				matchesExactText(row.server, sqlFilters.server) &&
+				matchesExactText(row.database, sqlFilters.database) &&
+				matchesExactText(row.schema, sqlFilters.schema) &&
+				matchesExactText(row.table, sqlFilters.table) &&
+				matchesExactText(row.column, sqlFilters.column) &&
+				matchesExactText(row.dataType, sqlFilters.dataType) &&
+				matchesExactText(row.businessDescription, sqlFilters.businessDescription) &&
+				matchesExactText(row.llmConfidence, sqlFilters.llmConfidence),
+			),
+		[sqlFilters, sqlRows],
+	);
+
+	const filteredCosmosRows = useMemo(
+		() =>
+			cosmosRows.filter((row) =>
+				matchesExactText(row.domain, cosmosFilters.domain) &&
+				matchesExactText(row.subDomain, cosmosFilters.subDomain) &&
+				matchesExactText(row.database, cosmosFilters.database) &&
+				matchesExactText(row.collection, cosmosFilters.collection) &&
+				matchesExactText(row.fieldPath, cosmosFilters.fieldPath) &&
+				matchesExactText(row.inferredType, cosmosFilters.inferredType) &&
+				matchesExactText(row.nullable, cosmosFilters.nullable) &&
+				matchesExactText(row.businessDescription, cosmosFilters.businessDescription) &&
+				matchesExactText(row.llmConfidence, cosmosFilters.llmConfidence),
+			),
+		[cosmosFilters, cosmosRows],
+	);
+
+	const sqlTotalPages = useMemo(
+		() => Math.max(1, Math.ceil(filteredSqlRows.length / sqlPageSize)),
+		[filteredSqlRows.length, sqlPageSize],
+	);
+
+	const cosmosTotalPages = useMemo(
+		() => Math.max(1, Math.ceil(filteredCosmosRows.length / cosmosPageSize)),
+		[cosmosPageSize, filteredCosmosRows.length],
+	);
+
+	useEffect(() => {
+		setSqlPage(1);
+	}, [sqlFilters, sqlPageSize]);
+
+	useEffect(() => {
+		setCosmosPage(1);
+	}, [cosmosFilters, cosmosPageSize]);
+
+	useEffect(() => {
+		if (sqlPage > sqlTotalPages) {
+			setSqlPage(sqlTotalPages);
+		}
+	}, [sqlPage, sqlTotalPages]);
+
+	useEffect(() => {
+		if (cosmosPage > cosmosTotalPages) {
+			setCosmosPage(cosmosTotalPages);
+		}
+	}, [cosmosPage, cosmosTotalPages]);
+
+	const pagedSqlRows = useMemo(() => {
+		const start = (sqlPage - 1) * sqlPageSize;
+		return filteredSqlRows.slice(start, start + sqlPageSize);
+	}, [filteredSqlRows, sqlPage, sqlPageSize]);
+
+	const pagedCosmosRows = useMemo(() => {
+		const start = (cosmosPage - 1) * cosmosPageSize;
+		return filteredCosmosRows.slice(start, start + cosmosPageSize);
+	}, [cosmosPage, cosmosPageSize, filteredCosmosRows]);
+
+	const downloadCsv = () => {
+		if (activeTab === "sql") {
+			if (filteredSqlRows.length === 0) {
+				return;
+			}
+
+			const headers = [
+				"Domain",
+				"Sub Domain",
+				"Server",
+				"Database",
+				"Schema",
+				"Table",
+				"Column",
+				"Data Type",
+				"Business Description",
+				"LLM Confidence",
+			];
+
+			const rows = filteredSqlRows.map((row) => [
+				row.domain,
+				row.subDomain,
+				row.server,
+				row.database,
+				row.schema,
+				row.table,
+				row.column,
+				row.dataType,
+				row.businessDescription,
+				row.llmConfidence,
+			]);
+
+			const csvContent = [
+				headers.map(escapeCsvValue).join(","),
+				...rows.map((row) => row.map(escapeCsvValue).join(",")),
+			].join("\n");
+
+			const blob = new Blob([csvContent], { type: "text/csv;charset=utf-8;" });
+			const url = URL.createObjectURL(blob);
+			const link = document.createElement("a");
+			link.href = url;
+			link.download = "sql_metadata_filtered.csv";
+			document.body.appendChild(link);
+			link.click();
+			document.body.removeChild(link);
+			URL.revokeObjectURL(url);
+			return;
+		}
+
+		if (filteredCosmosRows.length === 0) {
+			return;
+		}
+
+		const headers = [
+			"Domain",
+			"Sub Domain",
+			"Cosmos Database",
+			"Collection",
+			"Field Path",
+			"Inferred Type",
+			"Nullable",
+			"Business Description",
+			"LLM Confidence",
+		];
+
+		const rows = filteredCosmosRows.map((row) => [
+			row.domain,
+			row.subDomain,
+			row.database,
+			row.collection,
+			row.fieldPath,
+			row.inferredType,
+			row.nullable,
+			row.businessDescription,
+			row.llmConfidence,
+		]);
+
+		const csvContent = [
+			headers.map(escapeCsvValue).join(","),
+			...rows.map((row) => row.map(escapeCsvValue).join(",")),
+		].join("\n");
+
+		const blob = new Blob([csvContent], { type: "text/csv;charset=utf-8;" });
+		const url = URL.createObjectURL(blob);
+		const link = document.createElement("a");
+		link.href = url;
+		link.download = "cosmos_metadata_filtered.csv";
+		document.body.appendChild(link);
+		link.click();
+		document.body.removeChild(link);
+		URL.revokeObjectURL(url);
+	};
 
 	return (
 		<section className="surface p-6">
-			<h2 className="font-display text-3xl text-blue-950">SQL Column Grid</h2>
+			<h2 className="font-display text-3xl text-blue-950">Node Search</h2>
 			<p className="mt-1 text-sm text-blue-900/75">
-				View onboarded SQL columns filtered by Domain, Sub Domain, database, schema, and table.
+				Showing all records. Use table filters to narrow results.
 			</p>
 
-			<div className="mt-4 grid max-w-4xl gap-3 md:grid-cols-2">
-				<select
-					className="select-field w-full"
-					disabled={isLoadingHierarchy}
-					onChange={(event) => setSelectedDomainId(event.target.value)}
-					value={selectedDomainId}
-				>
-					<option value="">All Domains</option>
-					{domains.map((domain) => (
-						<option key={domain.id} value={domain.id}>
-							{domain.name}
-						</option>
-					))}
-				</select>
-
-				<select
-					className="select-field w-full"
-					disabled={isLoadingHierarchy}
-					onChange={(event) => setSelectedSubDomainId(event.target.value)}
-					value={selectedSubDomainId}
-				>
-					<option value="">All Sub Domains</option>
-					{availableSubDomains.map((subDomain: MetadataExplorerSubDomain) => (
-						<option key={subDomain.id} value={subDomain.id}>
-							{subDomain.name}
-						</option>
-					))}
-				</select>
-
-				<select
-					className="select-field w-full"
-					disabled={isLoadingHierarchy}
-					onChange={(event) => setSelectedDatabaseId(event.target.value)}
-					value={selectedDatabaseId}
-				>
-					<option value="">All Databases</option>
-					{availableDatabases.map((database) => (
-						<option key={database.id} value={database.id}>
-							{database.name}
-						</option>
-					))}
-				</select>
-
-				<select
-					className="select-field w-full"
-					disabled={isLoadingHierarchy}
-					onChange={(event) => setSelectedSchemaId(event.target.value)}
-					value={selectedSchemaId}
-				>
-					<option value="">All Schemas</option>
-					{availableSchemas.map((schema) => (
-						<option key={schema.id} value={schema.id}>
-							{schema.name}
-						</option>
-					))}
-				</select>
-
-				<select
-					className="select-field w-full"
-					disabled={isLoadingHierarchy}
-					onChange={(event) => setSelectedTableId(event.target.value)}
-					value={selectedTableId}
-				>
-					<option value="">All Tables</option>
-					{availableTables.map((table) => (
-						<option key={table.id} value={table.id}>
-							{table.name}
-						</option>
-					))}
-				</select>
-
+			<div className="mt-4 flex flex-wrap items-center gap-2">
 				<button
-					className="btn-primary justify-self-start"
-					disabled={isLoading || isLoadingHierarchy}
-					onClick={() => void loadColumns()}
+					className={activeTab === "sql" ? "btn-primary" : "btn-secondary"}
+					onClick={() => setActiveTab("sql")}
 					type="button"
 				>
-					{isLoading ? "Loading grid..." : "Refresh Grid"}
+					SQL Server
+				</button>
+				<button
+					className={activeTab === "cosmos" ? "btn-primary" : "btn-secondary"}
+					onClick={() => setActiveTab("cosmos")}
+					type="button"
+				>
+					Cosmos
+				</button>
+				<button className="btn-secondary" disabled={isLoading} onClick={() => void loadRows()} type="button">
+					{isLoading ? "Refreshing..." : "Refresh"}
+				</button>
+				<button
+					className="btn-secondary"
+					onClick={activeTab === "sql" ? resetSqlFilters : resetCosmosFilters}
+					type="button"
+				>
+					Clear All Filters
+				</button>
+				<button
+					className="btn-secondary"
+					disabled={activeTab === "sql" ? filteredSqlRows.length === 0 : filteredCosmosRows.length === 0}
+					onClick={downloadCsv}
+					type="button"
+				>
+					Download CSV
 				</button>
 			</div>
 
 			<p className="mt-3 text-sm text-blue-900/75">
-				Rows: {totalCount}
+				Rows: {activeTab === "sql" ? filteredSqlRows.length : filteredCosmosRows.length}
 			</p>
 
-			{error ? (
-				<pre className="alert-error mt-4 overflow-auto text-xs">
-					{error}
-				</pre>
-			) : null}
+			<div className="mt-2 flex flex-wrap items-center gap-2 text-sm text-blue-900">
+				<label className="flex items-center gap-2">
+					<span>Page size</span>
+					<select
+						className="select-field"
+						value={activeTab === "sql" ? sqlPageSize : cosmosPageSize}
+						onChange={(event) => {
+							const nextSize = Number(event.target.value);
+							if (activeTab === "sql") {
+								setSqlPageSize(nextSize);
+							} else {
+								setCosmosPageSize(nextSize);
+							}
+						}}
+					>
+						<option value={10}>10</option>
+						<option value={25}>25</option>
+						<option value={50}>50</option>
+						<option value={100}>100</option>
+					</select>
+				</label>
+
+				<button
+					className="btn-secondary"
+					disabled={activeTab === "sql" ? sqlPage <= 1 : cosmosPage <= 1}
+					onClick={() => {
+						if (activeTab === "sql") {
+							setSqlPage((prev) => Math.max(1, prev - 1));
+						} else {
+							setCosmosPage((prev) => Math.max(1, prev - 1));
+						}
+					}}
+					type="button"
+				>
+					Previous
+				</button>
+
+				<span>
+					Page {activeTab === "sql" ? sqlPage : cosmosPage} of {activeTab === "sql" ? sqlTotalPages : cosmosTotalPages}
+				</span>
+
+				<button
+					className="btn-secondary"
+					disabled={activeTab === "sql" ? sqlPage >= sqlTotalPages : cosmosPage >= cosmosTotalPages}
+					onClick={() => {
+						if (activeTab === "sql") {
+							setSqlPage((prev) => Math.min(sqlTotalPages, prev + 1));
+						} else {
+							setCosmosPage((prev) => Math.min(cosmosTotalPages, prev + 1));
+						}
+					}}
+					type="button"
+				>
+					Next
+				</button>
+			</div>
+
+			{error ? <pre className="alert-error mt-4 overflow-auto text-xs">{error}</pre> : null}
 
 			<div className="mt-4 overflow-x-auto rounded-xl border border-blue-200">
-				<table className="min-w-full text-left text-xs text-blue-950">
-					<thead className="bg-blue-50">
-						<tr>
-							<th className="px-3 py-2">Domain</th>
-							<th className="px-3 py-2">Sub Domain</th>
-							<th className="px-3 py-2">Server</th>
-							<th className="px-3 py-2">Database</th>
-							<th className="px-3 py-2">Schema</th>
-							<th className="px-3 py-2">Table</th>
-							<th className="px-3 py-2">Column</th>
-							<th className="px-3 py-2">Data Type</th>
-							<th className="px-3 py-2">Business Description</th>
-							<th className="px-3 py-2">LLM Confidence</th>
-						</tr>
-					</thead>
-					<tbody>
-						{rows.length === 0 ? (
+				{activeTab === "sql" ? (
+					<table className="min-w-full text-left text-xs text-blue-950">
+						<thead className="bg-blue-50">
 							<tr>
-								<td className="px-3 py-3 text-blue-900/70" colSpan={10}>
-									{isLoading ? "Loading rows..." : "No SQL columns found for selected filters."}
-								</td>
+								<th className="px-3 py-2">Domain</th>
+								<th className="px-3 py-2">Sub Domain</th>
+								<th className="px-3 py-2">Server</th>
+								<th className="px-3 py-2">Database</th>
+								<th className="px-3 py-2">Schema</th>
+								<th className="px-3 py-2">Table</th>
+								<th className="px-3 py-2">Column</th>
+								<th className="px-3 py-2">Data Type</th>
+								<th className="px-3 py-2">Business Description</th>
+								<th className="px-3 py-2">LLM Confidence</th>
 							</tr>
-						) : (
-							rows.map((row) => (
-								<tr key={row.key} className="border-t border-blue-100 hover:bg-blue-50">
-									<td className="px-3 py-2">{row.domain}</td>
-									<td className="px-3 py-2">{row.subDomain}</td>
-									<td className="px-3 py-2">{row.server}</td>
-									<td className="px-3 py-2">{row.database}</td>
-									<td className="px-3 py-2">{row.schema}</td>
-									<td className="px-3 py-2">{row.table}</td>
-									<td className="px-3 py-2 font-medium">{row.column}</td>
-									<td className="px-3 py-2">{row.dataType}</td>
-									<td className="px-3 py-2 max-w-md">{row.businessDescription}</td>
-									<td className="px-3 py-2">{row.llmConfidence}</td>
+							<tr>
+								<td className="px-2 py-2"><input className="input-field" value={sqlFilters.domain} onChange={(event) => setSqlFilters((prev) => ({ ...prev, domain: event.target.value }))} placeholder="Filter" /></td>
+								<td className="px-2 py-2"><input className="input-field" value={sqlFilters.subDomain} onChange={(event) => setSqlFilters((prev) => ({ ...prev, subDomain: event.target.value }))} placeholder="Filter" /></td>
+								<td className="px-2 py-2"><input className="input-field" value={sqlFilters.server} onChange={(event) => setSqlFilters((prev) => ({ ...prev, server: event.target.value }))} placeholder="Filter" /></td>
+								<td className="px-2 py-2"><input className="input-field" value={sqlFilters.database} onChange={(event) => setSqlFilters((prev) => ({ ...prev, database: event.target.value }))} placeholder="Filter" /></td>
+								<td className="px-2 py-2"><input className="input-field" value={sqlFilters.schema} onChange={(event) => setSqlFilters((prev) => ({ ...prev, schema: event.target.value }))} placeholder="Filter" /></td>
+								<td className="px-2 py-2"><input className="input-field" value={sqlFilters.table} onChange={(event) => setSqlFilters((prev) => ({ ...prev, table: event.target.value }))} placeholder="Filter" /></td>
+								<td className="px-2 py-2"><input className="input-field" value={sqlFilters.column} onChange={(event) => setSqlFilters((prev) => ({ ...prev, column: event.target.value }))} placeholder="Filter" /></td>
+								<td className="px-2 py-2"><input className="input-field" value={sqlFilters.dataType} onChange={(event) => setSqlFilters((prev) => ({ ...prev, dataType: event.target.value }))} placeholder="Filter" /></td>
+								<td className="px-2 py-2"><input className="input-field" value={sqlFilters.businessDescription} onChange={(event) => setSqlFilters((prev) => ({ ...prev, businessDescription: event.target.value }))} placeholder="Filter" /></td>
+								<td className="px-2 py-2"><input className="input-field" value={sqlFilters.llmConfidence} onChange={(event) => setSqlFilters((prev) => ({ ...prev, llmConfidence: event.target.value }))} placeholder="Filter" /></td>
+							</tr>
+						</thead>
+						<tbody>
+							{filteredSqlRows.length === 0 ? (
+								<tr>
+									<td className="px-3 py-3 text-blue-900/70" colSpan={10}>
+										{isLoading ? "Loading rows..." : "No SQL records found."}
+									</td>
 								</tr>
-							))
-						)}
-					</tbody>
-				</table>
+							) : (
+								pagedSqlRows.map((row) => (
+									<tr key={row.key} className="border-t border-blue-100 hover:bg-blue-50">
+										<td className="px-3 py-2">{row.domain}</td>
+										<td className="px-3 py-2">{row.subDomain}</td>
+										<td className="px-3 py-2">{row.server}</td>
+										<td className="px-3 py-2">{row.database}</td>
+										<td className="px-3 py-2">{row.schema}</td>
+										<td className="px-3 py-2">{row.table}</td>
+										<td className="px-3 py-2 font-medium">{row.column}</td>
+										<td className="px-3 py-2">{row.dataType}</td>
+										<td className="px-3 py-2 max-w-md">{row.businessDescription}</td>
+										<td className="px-3 py-2">{row.llmConfidence}</td>
+									</tr>
+								))
+							)}
+						</tbody>
+					</table>
+				) : (
+					<table className="min-w-full text-left text-xs text-blue-950">
+						<thead className="bg-blue-50">
+							<tr>
+								<th className="px-3 py-2">Domain</th>
+								<th className="px-3 py-2">Sub Domain</th>
+								<th className="px-3 py-2">Cosmos Database</th>
+								<th className="px-3 py-2">Collection</th>
+								<th className="px-3 py-2">Field Path</th>
+								<th className="px-3 py-2">Inferred Type</th>
+								<th className="px-3 py-2">Nullable</th>
+								<th className="px-3 py-2">Business Description</th>
+								<th className="px-3 py-2">LLM Confidence</th>
+							</tr>
+							<tr>
+								<td className="px-2 py-2"><input className="input-field" value={cosmosFilters.domain} onChange={(event) => setCosmosFilters((prev) => ({ ...prev, domain: event.target.value }))} placeholder="Filter" /></td>
+								<td className="px-2 py-2"><input className="input-field" value={cosmosFilters.subDomain} onChange={(event) => setCosmosFilters((prev) => ({ ...prev, subDomain: event.target.value }))} placeholder="Filter" /></td>
+								<td className="px-2 py-2"><input className="input-field" value={cosmosFilters.database} onChange={(event) => setCosmosFilters((prev) => ({ ...prev, database: event.target.value }))} placeholder="Filter" /></td>
+								<td className="px-2 py-2"><input className="input-field" value={cosmosFilters.collection} onChange={(event) => setCosmosFilters((prev) => ({ ...prev, collection: event.target.value }))} placeholder="Filter" /></td>
+								<td className="px-2 py-2"><input className="input-field" value={cosmosFilters.fieldPath} onChange={(event) => setCosmosFilters((prev) => ({ ...prev, fieldPath: event.target.value }))} placeholder="Filter" /></td>
+								<td className="px-2 py-2"><input className="input-field" value={cosmosFilters.inferredType} onChange={(event) => setCosmosFilters((prev) => ({ ...prev, inferredType: event.target.value }))} placeholder="Filter" /></td>
+								<td className="px-2 py-2"><input className="input-field" value={cosmosFilters.nullable} onChange={(event) => setCosmosFilters((prev) => ({ ...prev, nullable: event.target.value }))} placeholder="Filter" /></td>
+								<td className="px-2 py-2"><input className="input-field" value={cosmosFilters.businessDescription} onChange={(event) => setCosmosFilters((prev) => ({ ...prev, businessDescription: event.target.value }))} placeholder="Filter" /></td>
+								<td className="px-2 py-2"><input className="input-field" value={cosmosFilters.llmConfidence} onChange={(event) => setCosmosFilters((prev) => ({ ...prev, llmConfidence: event.target.value }))} placeholder="Filter" /></td>
+							</tr>
+						</thead>
+						<tbody>
+							{filteredCosmosRows.length === 0 ? (
+								<tr>
+									<td className="px-3 py-3 text-blue-900/70" colSpan={11}>
+										{isLoading ? "Loading rows..." : "No Cosmos records found."}
+									</td>
+								</tr>
+							) : (
+								pagedCosmosRows.map((row) => (
+									<tr key={row.key} className="border-t border-blue-100 hover:bg-blue-50">
+										<td className="px-3 py-2">{row.domain}</td>
+										<td className="px-3 py-2">{row.subDomain}</td>
+										<td className="px-3 py-2">{row.database}</td>
+										<td className="px-3 py-2">{row.collection}</td>
+										<td className="px-3 py-2 font-medium">{row.fieldPath}</td>
+										<td className="px-3 py-2">{row.inferredType}</td>
+										<td className="px-3 py-2">{row.nullable}</td>
+										<td className="px-3 py-2 max-w-md">{row.businessDescription}</td>
+										<td className="px-3 py-2">{row.llmConfidence}</td>
+									</tr>
+								))
+							)}
+						</tbody>
+					</table>
+				)}
 			</div>
 		</section>
 	);

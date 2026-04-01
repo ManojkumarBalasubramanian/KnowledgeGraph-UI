@@ -287,14 +287,36 @@ export interface CosmosOnboardRequest {
   uri: string;
   key: string;
   database_name: string;
+  sub_domain_id: string;
   enterprise_id?: string;
   domain_id?: string;
-  sub_domain_id?: string;
+  delta_only?: boolean;
+  parallel_enabled?: boolean;
+  max_workers?: number;
+  rollup_batch_enabled?: boolean;
 }
 
 export interface CosmosOnboardResponse {
   message: string;
-  containers_onboarded: number;
+  database_name: string;
+  delta_only: boolean;
+  optimization: {
+    parallel_enabled: boolean;
+    max_workers: number;
+    rollup_batch_enabled: boolean;
+  };
+  enterprise_link?: {
+    enterprise_id: string;
+    domain_id: string;
+    relationship_type: string;
+  };
+  sub_domain_link?: {
+    sub_domain_id: string;
+    asset_type: string;
+    asset_name: string;
+    relationship_type: string;
+    created: boolean;
+  };
 }
 
 export interface KafkaOnboardRequest {

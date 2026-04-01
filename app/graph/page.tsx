@@ -82,17 +82,35 @@ export default function GraphPage() {
 	const [isProcessingApprovals, setIsProcessingApprovals] = useState(false);
 	const [error, setError] = useState("");
 	const [message, setMessage] = useState("");
+	const [debugInfo, setDebugInfo] = useState<{
+		operation: string;
+		endpoint: string;
+		statusCode?: number;
+	} | null>(null);
 
 	useEffect(() => {
 		const loadHierarchy = async () => {
 			setIsLoadingHierarchy(true);
 			setMessage("");
 			setError("");
+			setDebugInfo({
+				operation: "load-hierarchy",
+				endpoint: "/api/graph/metadata-explorer/hierarchy",
+			});
 			try {
 				const data = await getMetadataExplorerHierarchy();
 				setHierarchy(data);
 			} catch (err) {
 				if (err instanceof APIRequestError) {
+					setDebugInfo((previous) =>
+						previous
+							? { ...previous, statusCode: err.statusCode }
+							: {
+								operation: "load-hierarchy",
+								endpoint: "/api/graph/metadata-explorer/hierarchy",
+								statusCode: err.statusCode,
+							},
+					);
 					setError(
 						typeof err.detail === "string"
 							? err.detail
@@ -176,6 +194,9 @@ export default function GraphPage() {
 		[assets, assetId],
 	);
 
+	const metadataEntityLabel = selectedAsset?.asset_type === "Collection" ? "Field" : "Column";
+	const metadataEntityLabelLower = metadataEntityLabel.toLowerCase();
+
 	const assetSelectorLabel = useMemo(() => {
 		if (assets.length > 0 && assets.every((asset) => asset.asset_type === "Table")) {
 			return "Table";
@@ -242,6 +263,10 @@ export default function GraphPage() {
 			setIsLoadingDetail(true);
 			setMessage("");
 			setError("");
+			setDebugInfo({
+				operation: "load-asset-detail",
+				endpoint: `/api/graph/metadata-explorer/assets/${encodeURIComponent(selectedAsset.id)}`,
+			});
 			try {
 				const detail = await getMetadataAssetDetail(selectedAsset.id);
 				const columnRows = detail.columns ?? [];
@@ -253,6 +278,15 @@ export default function GraphPage() {
 				setColumnDescriptionDrafts(draftMap);
 			} catch (err) {
 				if (err instanceof APIRequestError) {
+					setDebugInfo((previous) =>
+						previous
+							? { ...previous, statusCode: err.statusCode }
+							: {
+								operation: "load-asset-detail",
+								endpoint: `/api/graph/metadata-explorer/assets/${encodeURIComponent(selectedAsset.id)}`,
+								statusCode: err.statusCode,
+							},
+					);
 					setError(
 						typeof err.detail === "string"
 							? err.detail
@@ -271,7 +305,7 @@ export default function GraphPage() {
 
 	const saveDescription = async () => {
 		if (!selectedAsset?.id) {
-			setError("Select an asset before saving column descriptions.");
+			setError(`Select an asset before saving ${metadataEntityLabelLower} descriptions.`);
 			return;
 		}
 
@@ -284,13 +318,17 @@ export default function GraphPage() {
 			}));
 
 		if (payloadColumns.length === 0) {
-			setError("No changed columns available for bulk update.");
+			setError(`No changed ${metadataEntityLabelLower}s available for bulk update.`);
 			return;
 		}
 
 		setIsSavingDescription(true);
 		setError("");
 		setMessage("");
+		setDebugInfo({
+			operation: "bulk-update-descriptions",
+			endpoint: `/api/graph/metadata-explorer/assets/${encodeURIComponent(selectedAsset.id)}/columns/business-description/bulk`,
+		});
 		try {
 			const response = await bulkUpdateMetadataColumnDescriptions(selectedAsset.id, {
 				columns: payloadColumns,
@@ -303,16 +341,25 @@ export default function GraphPage() {
 					llm_confidence: isColumnEdited(column) ? 1 : column.llm_confidence,
 				})),
 			);
-			setMessage(response.message || "Column descriptions bulk-updated.");
+			setMessage(response.message || `${metadataEntityLabel} descriptions bulk-updated.`);
 		} catch (err) {
 			if (err instanceof APIRequestError) {
+				setDebugInfo((previous) =>
+					previous
+						? { ...previous, statusCode: err.statusCode }
+						: {
+							operation: "bulk-update-descriptions",
+							endpoint: `/api/graph/metadata-explorer/assets/${encodeURIComponent(selectedAsset.id)}/columns/business-description/bulk`,
+							statusCode: err.statusCode,
+						},
+				);
 				setError(
 					typeof err.detail === "string"
 						? err.detail
 						: JSON.stringify(err.detail, null, 2),
 				);
 			} else {
-				setError("Failed saving column descriptions.");
+				setError(`Failed saving ${metadataEntityLabelLower} descriptions.`);
 			}
 		} finally {
 			setIsSavingDescription(false);
@@ -321,20 +368,33 @@ export default function GraphPage() {
 
 	const processApprovedDescriptions = async () => {
 		if (!selectedAsset?.id) {
-			setError("Select an asset before processing approved descriptions.");
+			setError(`Select an asset before processing approved ${metadataEntityLabelLower} descriptions.`);
 			return;
 		}
 
 		setIsProcessingApprovals(true);
 		setError("");
 		setMessage("");
+		setDebugInfo({
+			operation: "process-approved",
+			endpoint: `/api/graph/metadata-explorer/assets/${encodeURIComponent(selectedAsset.id)}/process-approved`,
+		});
 		try {
 			const response = await processMetadataApprovedDescriptions(selectedAsset.id, {
 				requested_by: stewardName.trim() || undefined,
 			});
-			setMessage(response.message || "Approved descriptions processing has started.");
+			setMessage(response.message || `Approved ${metadataEntityLabelLower} descriptions processing has started.`);
 		} catch (err) {
 			if (err instanceof APIRequestError) {
+				setDebugInfo((previous) =>
+					previous
+						? { ...previous, statusCode: err.statusCode }
+						: {
+							operation: "process-approved",
+							endpoint: `/api/graph/metadata-explorer/assets/${encodeURIComponent(selectedAsset.id)}/process-approved`,
+							statusCode: err.statusCode,
+						},
+				);
 				setError(
 					typeof err.detail === "string"
 						? err.detail
@@ -495,57 +555,69 @@ export default function GraphPage() {
 				{error ? (
 					<div className="alert-error mt-4 overflow-auto text-xs">{error}</div>
 				) : null}
+
+				{debugInfo ? (
+					<div className="mt-3 rounded-md border border-blue-200 bg-blue-50/70 p-3 text-xs text-blue-900">
+						<p className="font-semibold">Debug Context</p>
+						<p>Operation: {debugInfo.operation}</p>
+						<p>Endpoint: {debugInfo.endpoint}</p>
+						<p>Status: {debugInfo.statusCode ?? "pending/success"}</p>
+						<p>
+							Selection: store_type={storeType}, domain={domainId || "-"}, sub_domain={subDomainId || "-"},
+							 store={storeId || "-"}, schema={schemaId || "-"}, asset={assetId || "-"}
+						</p>
+					</div>
+				) : null}
 			</section>
 
 			<section className="surface p-5">
-				<h3 className="text-lg font-semibold text-blue-950">Column Metadata Editor</h3>
+				<h3 className="text-lg font-semibold text-blue-950">Metadata Editor</h3>
 				{selectedAsset ? (
 					<div className="mt-3 space-y-4 text-sm text-blue-900">
 						{isLoadingDetail ? <p>Loading asset details from graph DB...</p> : null}
 						<div className="rounded-xl border border-blue-100 bg-white p-3">
 							<p className="text-sm font-semibold text-blue-950">
-								Columns for {selectedAsset.name}
+								{metadataEntityLabel}s for {selectedAsset.name}
 							</p>
-							{selectedAsset.asset_type === "Table" ? (
-								columns.length > 0 ? (
-									<div className="mt-3 space-y-3">
-										<div className="grid gap-2 md:grid-cols-[1fr_1fr_1fr_auto]">
-											<input
-												className="input-field"
-												onChange={(event) => setColumnNameFilter(event.target.value)}
-												placeholder="Filter by column name"
-												value={columnNameFilter}
-											/>
-											<input
-												className="input-field"
-												onChange={(event) => setColumnTypeFilter(event.target.value)}
-												placeholder="Filter by data type"
-												value={columnTypeFilter}
-											/>
-											<input
-												className="input-field"
-												onChange={(event) => setColumnDescriptionFilter(event.target.value)}
-												placeholder="Filter by business description"
-												value={columnDescriptionFilter}
-											/>
-											<button
-												className="btn-secondary"
-												onClick={clearColumnFilters}
-												type="button"
-											>
-												Clear Filters
-											</button>
-										</div>
-										<p className="text-xs text-blue-800/75">
-											Showing {filteredColumns.length} of {columns.length} columns
-										</p>
-										<div className="overflow-x-auto">
-											<table className="min-w-full border-collapse text-left text-xs">
+							{columns.length > 0 ? (
+								<div className="mt-3 space-y-3">
+									<div className="grid gap-2 md:grid-cols-[1fr_1fr_1fr_auto]">
+										<input
+											className="input-field"
+											onChange={(event) => setColumnNameFilter(event.target.value)}
+											placeholder={`Filter by ${metadataEntityLabelLower} name`}
+											value={columnNameFilter}
+										/>
+										<input
+											className="input-field"
+											onChange={(event) => setColumnTypeFilter(event.target.value)}
+											placeholder="Filter by data type"
+											value={columnTypeFilter}
+										/>
+										<input
+											className="input-field"
+											onChange={(event) => setColumnDescriptionFilter(event.target.value)}
+											placeholder="Filter by business description"
+											value={columnDescriptionFilter}
+										/>
+										<button
+											className="btn-secondary"
+											onClick={clearColumnFilters}
+											type="button"
+										>
+											Clear Filters
+										</button>
+									</div>
+									<p className="text-xs text-blue-800/75">
+										Showing {filteredColumns.length} of {columns.length} {metadataEntityLabelLower}s
+									</p>
+									<div className="overflow-x-auto">
+										<table className="min-w-full border-collapse text-left text-xs">
 											<thead>
 												<tr className="border-b border-blue-200 text-blue-800">
-													<th className="px-2 py-2 font-semibold">Column Name</th>
+													<th className="px-2 py-2 font-semibold">{metadataEntityLabel} Name</th>
 													<th className="px-2 py-2 font-semibold">Data Type</th>
-													<th className="px-2 py-2 font-semibold">Column Description</th>
+													<th className="px-2 py-2 font-semibold">{metadataEntityLabel} Description</th>
 													<th className="px-2 py-2 font-semibold">LLM Confidence</th>
 												</tr>
 											</thead>
@@ -563,7 +635,7 @@ export default function GraphPage() {
 																		[column.column_id]: event.target.value,
 																	}))
 																}
-																placeholder="Edit column description"
+																placeholder={`Edit ${metadataEntityLabelLower} description`}
 																value={columnDescriptionDrafts[column.column_id] || ""}
 															/>
 														</td>
@@ -579,27 +651,24 @@ export default function GraphPage() {
 												{filteredColumns.length === 0 ? (
 													<tr>
 														<td className="px-2 py-4 text-blue-900/70" colSpan={4}>
-															No columns match the active filters.
+															No {metadataEntityLabelLower}s match the active filters.
 														</td>
 													</tr>
 												) : null}
 											</tbody>
 											</table>
 										</div>
-									</div>
-								) : (
-									<p className="mt-2 text-blue-900/70">No columns were returned for this table.</p>
-								)
+								</div>
 							) : (
 								<p className="mt-2 text-blue-900/70">
-									Column grid is shown for Table assets. Current selection is {selectedAsset.asset_type}.
+									No {metadataEntityLabelLower}s were returned for this {selectedAsset.asset_type.toLowerCase()}.
 								</p>
 							)}
 
 							<div className="mt-4 border-t border-blue-100 pt-4">
-								<p className="text-sm font-semibold text-blue-950">Bulk Column Update</p>
+								<p className="text-sm font-semibold text-blue-950">Bulk {metadataEntityLabel} Update</p>
 								<p className="mt-1 text-xs text-blue-800/75">
-									{changedColumnCount} column description change(s) pending
+									{changedColumnCount} {metadataEntityLabelLower} description change(s) pending
 								</p>
 
 								<div className="mt-3 grid gap-3 md:grid-cols-[1fr_auto_auto]">
@@ -615,7 +684,7 @@ export default function GraphPage() {
 										onClick={saveDescription}
 										type="button"
 									>
-										{isSavingDescription ? "Saving..." : "Bulk Update Descriptions"}
+										{isSavingDescription ? "Saving..." : `Bulk Update ${metadataEntityLabel} Descriptions`}
 									</button>
 									<button
 										className="btn-secondary"
@@ -632,7 +701,7 @@ export default function GraphPage() {
 					</div>
 				) : (
 					<p className="mt-3 text-sm text-blue-900/70">
-						Select Domain, Sub Domain, Store, Schema, and {assetSelectorLabel} to edit column metadata.
+						Select Domain, Sub Domain, Store, Schema, and {assetSelectorLabel} to edit metadata descriptions.
 					</p>
 				)}
 			</section>
